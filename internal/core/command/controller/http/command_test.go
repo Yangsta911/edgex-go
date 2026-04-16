@@ -17,7 +17,6 @@ import (
 	"github.com/edgexfoundry/edgex-go/internal/core/command/config"
 	commandContainer "github.com/edgexfoundry/edgex-go/internal/core/command/container"
 
-	"github.com/edgexfoundry/go-mod-bootstrap/v4/bootstrap/container"
 	bootstrapContainer "github.com/edgexfoundry/go-mod-bootstrap/v4/bootstrap/container"
 	bootstrapConfig "github.com/edgexfoundry/go-mod-bootstrap/v4/config"
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/di"
@@ -61,7 +60,7 @@ func NewMockDIC() *di.Container {
 				},
 			}
 		},
-		container.LoggingClientInterfaceName: func(get di.Get) interface{} {
+		bootstrapContainer.LoggingClientInterfaceName: func(get di.Get) interface{} {
 			return logger.NewMockClient()
 		},
 	})
@@ -117,7 +116,7 @@ func buildMultiDevicesResponse() responseDTO.MultiDevicesResponse {
 		{Name: testDeviceName + "2", ProfileName: testProfileName, ServiceName: testDeviceServiceName},
 	}
 	return responseDTO.MultiDevicesResponse{
-		BaseWithTotalCountResponse: commonDTO.NewBaseWithTotalCountResponse("", "", http.StatusOK, uint32(2)),
+		BaseWithTotalCountResponse: commonDTO.NewBaseWithTotalCountResponse("", "", http.StatusOK, int64(2)),
 		Devices:                    devices,
 	}
 }
@@ -206,7 +205,7 @@ func TestAllCommands(t *testing.T) {
 		limit              string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get commands without offset and limit", "", "", false, len(expectedMultiDeviceCoreCommandsResponse.DeviceCoreCommands), expectedMultiDevicesResponse.TotalCount, http.StatusOK},

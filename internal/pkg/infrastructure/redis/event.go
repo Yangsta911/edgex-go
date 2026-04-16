@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2020-2021 IOTech Ltd
+// Copyright (C) 2020-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,6 +12,8 @@ import (
 	"time"
 
 	pkgCommon "github.com/edgexfoundry/edgex-go/internal/pkg/common"
+	dbModels "github.com/edgexfoundry/edgex-go/internal/pkg/infrastructure/models"
+
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
@@ -30,7 +32,7 @@ const (
 // errors during deletion, this function will simply log the error.
 func (c *Client) asyncDeleteEventsByIds(eventIds []string) {
 	conn := c.Pool.Get()
-	defer conn.Close()
+	defer closeRedisConnection(conn, c.loggingClient)
 
 	//start a transaction to get all events
 	events, edgeXerr := getObjectsByIds(conn, pkgCommon.ConvertStringsToInterfaces(eventIds))
@@ -84,7 +86,7 @@ func (c *Client) asyncDeleteEventsByIds(eventIds []string) {
 // two goroutines to delete readings and events in the background to achieve better performance.
 func (c *Client) DeleteEventsByDeviceName(deviceName string) (edgeXerr errors.EdgeX) {
 	conn := c.Pool.Get()
-	defer conn.Close()
+	defer closeRedisConnection(conn, c.loggingClient)
 
 	eventIds, readingIds, err := getEventReadingIdsByKeyScoreRange(conn, CreateKey(EventsCollectionDeviceName, deviceName), GreaterThanZero, InfiniteMax)
 	if err != nil {
@@ -102,7 +104,7 @@ func (c *Client) DeleteEventsByDeviceName(deviceName string) (edgeXerr errors.Ed
 // two goroutines to delete readings and events in the background to achieve better performance.
 func (c *Client) DeleteEventsByAge(age int64) (edgeXerr errors.EdgeX) {
 	conn := c.Pool.Get()
-	defer conn.Close()
+	defer closeRedisConnection(conn, c.loggingClient)
 
 	expireTimestamp := time.Now().UnixNano() - age
 
@@ -291,7 +293,7 @@ func convertObjectsToEvents(conn redis.Conn, objects [][]byte) (events []models.
 	return events, nil
 }
 
-func (c *Client) EventCountByDeviceNameAndSourceNameAndLimit(deviceName, sourceName string, limit int) (uint32, errors.EdgeX) {
+func (c *Client) EventCountByDeviceNameAndSourceNameAndLimit(deviceName, sourceName string, limit int) (int64, errors.EdgeX) {
 	c.loggingClient.Warn("EventCountByDeviceNameAndSourceNameAndLimit function didn't implement")
 	return 0, nil
 }
@@ -306,12 +308,17 @@ func (c *Client) DeleteEventsByAgeAndDeviceNameAndSourceName(age int64, deviceNa
 	return nil
 }
 
-func (c *Client) LatestEventByDeviceNameAndSourceNameAndOffset(deviceName string, sourceName string, offset uint32) (models.Event, errors.EdgeX) {
+func (c *Client) LatestEventByDeviceNameAndSourceNameAndOffset(deviceName string, sourceName string, offset int64) (models.Event, errors.EdgeX) {
 	c.loggingClient.Warn("LatestEventByDeviceNameAndSourceNameAndOffset function didn't implement")
 	return models.Event{}, nil
 }
 
-func (c *Client) LatestEventByDeviceNameAndSourceNameAndAgeAndOffset(deviceName string, sourceName string, age int64, offset uint32) (models.Event, errors.EdgeX) {
+func (c *Client) LatestEventByDeviceNameAndSourceNameAndAgeAndOffset(deviceName string, sourceName string, age, offset int64) (models.Event, errors.EdgeX) {
 	c.loggingClient.Warn("LatestEventByDeviceNameAndSourceNameAndAgeAndOffset function didn't implement")
 	return models.Event{}, nil
+}
+
+func (c *Client) AllDeviceInfos(offset int, limit int) ([]dbModels.DeviceInfo, errors.EdgeX) {
+	c.loggingClient.Warn("AllDeviceInfos function didn't implement")
+	return []dbModels.DeviceInfo{}, nil
 }

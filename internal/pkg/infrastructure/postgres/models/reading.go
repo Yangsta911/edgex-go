@@ -1,11 +1,15 @@
 //
-// Copyright (C) 2024 IOTech Ltd
+// Copyright (C) 2024-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package models
 
-import "github.com/edgexfoundry/go-mod-core-contracts/v4/models"
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
+)
 
 // Reading struct contains the columns of the core_data.reading table in Postgres db relates to a reading
 // which includes all the fields in BaseReading, BinaryReading, SimpleReading and ObjectReading
@@ -15,6 +19,7 @@ type Reading struct {
 	BinaryReading
 	SimpleReading
 	ObjectReading
+	NumericReading
 }
 
 type SimpleReading struct {
@@ -28,6 +33,10 @@ type BinaryReading struct {
 
 type ObjectReading struct {
 	ObjectValue any
+}
+
+type NumericReading struct {
+	NumericValue *pgtype.Numeric
 }
 
 // GetBaseReading makes the Reading struct to implement the go-mod-core-contract Reading interface in models

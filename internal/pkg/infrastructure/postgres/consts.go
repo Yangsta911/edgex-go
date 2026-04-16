@@ -5,33 +5,33 @@
 
 package postgres
 
-// constants relate to the postgres db schema names
-const (
-	coreDataSchema             = "core_data"
-	coreKeeperSchema           = "core_keeper"
-	coreMetaDataSchema         = "core_metadata"
-	supportNotificationsSchema = "support_notifications"
-	supportSchedulerSchema     = "support_scheduler"
-	ProxyAuthSchema            = "security_proxy_auth"
+import (
+	data "github.com/edgexfoundry/edgex-go/internal/core/data/embed"
+	keeper "github.com/edgexfoundry/edgex-go/internal/core/keeper/embed"
+	metadata "github.com/edgexfoundry/edgex-go/internal/core/metadata/embed"
+	proxyauth "github.com/edgexfoundry/edgex-go/internal/security/proxyauth/embed"
+	notifications "github.com/edgexfoundry/edgex-go/internal/support/notifications/embed"
+	scheduler "github.com/edgexfoundry/edgex-go/internal/support/scheduler/embed"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
 )
 
 // constants relate to the postgres db table names
 const (
-	configTableName               = coreKeeperSchema + ".config"
-	eventTableName                = coreDataSchema + ".event"
-	deviceInfoTableName           = coreDataSchema + ".device_info"
-	deviceServiceTableName        = coreMetaDataSchema + ".device_service"
-	deviceProfileTableName        = coreMetaDataSchema + ".device_profile"
-	deviceTableName               = coreMetaDataSchema + ".device"
-	provisionWatcherTableName     = coreMetaDataSchema + ".provision_watcher"
-	notificationTableName         = supportNotificationsSchema + ".notification"
-	readingTableName              = coreDataSchema + ".reading"
-	registryTableName             = coreKeeperSchema + ".registry"
-	scheduleActionRecordTableName = supportSchedulerSchema + ".record"
-	scheduleJobTableName          = supportSchedulerSchema + ".job"
-	subscriptionTableName         = supportNotificationsSchema + ".subscription"
-	transmissionTableName         = supportNotificationsSchema + ".transmission"
-	keyStoreTableName             = ProxyAuthSchema + ".key_store"
+	configTableName               = keeper.SchemaName + ".config"
+	eventTableName                = data.SchemaName + ".event"
+	deviceInfoTableName           = data.SchemaName + ".device_info"
+	deviceServiceTableName        = metadata.SchemaName + ".device_service"
+	deviceProfileTableName        = metadata.SchemaName + ".device_profile"
+	deviceTableName               = metadata.SchemaName + ".device"
+	provisionWatcherTableName     = metadata.SchemaName + ".provision_watcher"
+	notificationTableName         = notifications.SchemaName + ".notification"
+	readingTableName              = data.SchemaName + ".reading"
+	registryTableName             = keeper.SchemaName + ".registry"
+	scheduleActionRecordTableName = scheduler.SchemaName + ".record"
+	scheduleJobTableName          = scheduler.SchemaName + ".job"
+	subscriptionTableName         = notifications.SchemaName + ".subscription"
+	transmissionTableName         = notifications.SchemaName + ".transmission"
+	keyStoreTableName             = proxyauth.SchemaName + ".key_store"
 )
 
 // constants relate to the common db table column names
@@ -42,6 +42,17 @@ const (
 	modifiedCol = "modified"
 	statusCol   = "status"
 	nameCol     = "name"
+)
+
+// constants relate to the named arguments as specified for SQL conditions
+const (
+	offsetCondition      = common.Offset
+	limitCondition       = common.Limit
+	startTimeCondition   = common.Start
+	endTimeCondition     = common.End
+	jsonContentCondition = "jsonContent"
+	categoryCondition    = "category"
+	labelsCondition      = "labels"
 )
 
 // constants relate to the event/reading postgres db table column names
@@ -57,9 +68,11 @@ const (
 	eventIdFKCol      = "event_id"
 	deviceInfoIdFKCol = "device_info_id"
 	valueCol          = "value"
+	numericValueCol   = "numeric_value"
 	binaryValueCol    = "binaryvalue"
 	mediaTypeCol      = "mediatype"
 	objectValueCol    = "objectvalue"
+	markDeletedCol    = "mark_deleted"
 )
 
 // constants relate to the keeper postgres db table column names

@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2024 IOTech Ltd
+// Copyright (C) 2024-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -72,7 +72,8 @@ func (c *Client) NotificationsByCategory(offset, limit int, ack, category string
 		queryObj[acknowledgedField] = cast.ToBool(ack)
 	}
 
-	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(notificationTableName), queryObj, offset, validLimit)
+	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(notificationTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all notifications by category %s", category), err)
 	}
@@ -87,7 +88,8 @@ func (c *Client) NotificationsByLabel(offset, limit int, ack, label string) ([]m
 	if len(ack) != 0 {
 		queryObj[acknowledgedField] = cast.ToBool(ack)
 	}
-	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(notificationTableName), queryObj, offset, validLimit)
+	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(notificationTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all notifications by label %s", label), err)
 	}
@@ -103,7 +105,8 @@ func (c *Client) NotificationsByStatus(offset, limit int, ack, status string) ([
 		queryObj[acknowledgedField] = cast.ToBool(ack)
 	}
 
-	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(notificationTableName), queryObj, offset, validLimit)
+	notifications, err := queryNotifications(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(notificationTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all notifications by status %s", status), err)
 	}
@@ -203,7 +206,7 @@ func (c *Client) UpdateNotificationAckStatusByIds(ack bool, ids []string) errors
 }
 
 // NotificationCountByCategory returns the count of notifications by category
-func (c *Client) NotificationCountByCategory(category string, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByCategory(category string, ack string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{categoryField: category}
 	if len(ack) != 0 {
 		queryObj[acknowledgedField] = cast.ToBool(ack)
@@ -212,7 +215,7 @@ func (c *Client) NotificationCountByCategory(category string, ack string) (uint3
 }
 
 // NotificationCountByLabel returns the count of notifications by label
-func (c *Client) NotificationCountByLabel(label string, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByLabel(label string, ack string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{labelsField: []string{label}}
 	if len(ack) != 0 {
 		queryObj[acknowledgedField] = cast.ToBool(ack)
@@ -221,7 +224,7 @@ func (c *Client) NotificationCountByLabel(label string, ack string) (uint32, err
 }
 
 // NotificationCountByStatus returns the count of notifications by status
-func (c *Client) NotificationCountByStatus(status string, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByStatus(status string, ack string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{statusField: status}
 	if len(ack) != 0 {
 		queryObj[acknowledgedField] = cast.ToBool(ack)
@@ -230,40 +233,41 @@ func (c *Client) NotificationCountByStatus(status string, ack string) (uint32, e
 }
 
 // NotificationCountByTimeRange returns the count of notifications by time range
-func (c *Client) NotificationCountByTimeRange(start int64, end int64, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByTimeRange(start int64, end int64, ack string) (int64, errors.EdgeX) {
 	notifications, err := notificationsByTimeRange(c.ConnPool, start, end, 0, -1, ack)
 	if err != nil {
 		return 0, errors.NewCommonEdgeXWrapper(err)
 	}
-	return uint32(len(notifications)), nil
+	return int64(len(notifications)), nil
 }
 
 // NotificationCountByCategoriesAndLabels returns the count of notifications by categories and labels
-func (c *Client) NotificationCountByCategoriesAndLabels(categories []string, labels []string, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByCategoriesAndLabels(categories []string, labels []string, ack string) (int64, errors.EdgeX) {
 	notifications, err := notificationsByCategoriesAndLabels(c.ConnPool, 0, -1, categories, labels, ack)
 	if err != nil {
 		return 0, errors.NewCommonEdgeXWrapper(err)
 	}
-	return uint32(len(notifications)), nil
+	return int64(len(notifications)), nil
 }
 
 // NotificationCountByQueryConditions returns the count of notifications by query conditions
-func (c *Client) NotificationCountByQueryConditions(condition requests.NotificationQueryCondition, ack string) (uint32, errors.EdgeX) {
+func (c *Client) NotificationCountByQueryConditions(condition requests.NotificationQueryCondition, ack string) (int64, errors.EdgeX) {
 	notifications, err := notificationsByQueryConditions(c.ConnPool, 0, -1, condition, ack)
 	if err != nil {
 		return 0, errors.NewCommonEdgeXWrapper(err)
 	}
-	return uint32(len(notifications)), nil
+	return int64(len(notifications)), nil
 }
 
 // NotificationTotalCount returns the total count of notifications
-func (c *Client) NotificationTotalCount() (uint32, errors.EdgeX) {
+func (c *Client) NotificationTotalCount() (int64, errors.EdgeX) {
 	return getTotalRowsCount(context.Background(), c.ConnPool, sqlQueryCount(notificationTableName))
 }
 
 // LatestNotificationByOffset returns the latest notification by offset
 func (c *Client) LatestNotificationByOffset(offset uint32) (models.Notification, errors.EdgeX) {
-	notification, err := queryNotification(context.Background(), c.ConnPool, sqlQueryContentWithPagination(notificationTableName), offset, 1)
+	notification, err := queryNotification(context.Background(), c.ConnPool, sqlQueryContentWithPaginationAsNamedArgs(notificationTableName),
+		pgx.NamedArgs{offsetCondition: offset, limitCondition: 1})
 	if err != nil {
 		return notification, errors.NewCommonEdgeX(errors.Kind(err), "failed to query latest notification by offset", err)
 	}
@@ -313,14 +317,13 @@ func notificationsByTimeRange(connPool *pgxpool.Pool, start, end int64, offset, 
 	if err != nil {
 		return nil, errors.NewCommonEdgeXWrapper(err)
 	}
-	args := []any{validStart, validEnd}
+	args := pgx.NamedArgs{startTimeCondition: validStart, endTimeCondition: validEnd, offsetCondition: offset, limitCondition: validLimit}
 	if len(ack) != 0 {
-		args = append(args, map[string]any{acknowledgedField: cast.ToBool(ack)})
+		args[jsonContentCondition] = map[string]any{acknowledgedField: cast.ToBool(ack)}
 	} else {
-		args = append(args, map[string]any{})
+		args[jsonContentCondition] = map[string]any{}
 	}
-	args = append(args, offset, validLimit)
-	notifications, err := queryNotifications(context.Background(), connPool, sqlQueryContentWithTimeRangeAndPagination(notificationTableName), args...)
+	notifications, err := queryNotifications(context.Background(), connPool, sqlQueryContentWithTimeRangeAndPaginationAsNamedArgs(notificationTableName), args)
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all notifications by time range", err)
 	}
@@ -335,23 +338,23 @@ func notificationsByCategoriesAndLabels(connPool *pgxpool.Pool, offset, limit in
 	FROM (
 	    SELECT content, COALESCE((content->>'%s')::bigint, 0) AS sort_key
 			FROM %s 
-			WHERE (content ->> '%s') = ANY($1)
+			WHERE (content ->> '%s') = ANY(@%s)
 		UNION
 		SELECT content, COALESCE((content->>'%s')::bigint, 0) AS sort_key 
 			FROM %s 
-			WHERE (content -> '%s')::jsonb ?| $2::text[]
+			WHERE (content -> '%s')::jsonb ?| @%s::text[]
 	)
-	WHERE content @> $3::jsonb
-	ORDER BY sort_key OFFSET $4 LIMIT $5;
-	`, createdField, notificationTableName, categoryField, createdField, notificationTableName, labelsField)
-	args := []any{categories, labels}
+	WHERE content @> @%s::jsonb
+	ORDER BY sort_key OFFSET @%s LIMIT @%s;
+	`, createdField, notificationTableName, categoryField, categoryCondition, createdField,
+		notificationTableName, labelsField, labelsCondition, jsonContentCondition, offsetCondition, limitCondition)
+	args := pgx.NamedArgs{categoryCondition: categories, labelsCondition: labels, offsetCondition: offset, limitCondition: validLimit}
 	if len(ack) != 0 {
-		args = append(args, map[string]any{acknowledgedField: cast.ToBool(ack)})
+		args[jsonContentCondition] = map[string]any{acknowledgedField: cast.ToBool(ack)}
 	} else {
-		args = append(args, map[string]any{})
+		args[jsonContentCondition] = map[string]any{}
 	}
-	args = append(args, offset, validLimit)
-	notifications, err := queryNotifications(context.Background(), connPool, sql, args...)
+	notifications, err := queryNotifications(context.Background(), connPool, sql, args)
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all notifications by categories and labels", err)
 	}
@@ -362,29 +365,29 @@ func notificationsByCategoriesAndLabels(connPool *pgxpool.Pool, offset, limit in
 func notificationsByQueryConditions(connPool *pgxpool.Pool, offset, limit int, condition requests.NotificationQueryCondition, ack string) ([]models.Notification, errors.EdgeX) {
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 
-	args := []any{condition.Start, condition.End}
+	args := pgx.NamedArgs{startTimeCondition: condition.Start, endTimeCondition: condition.End, offsetCondition: offset, limitCondition: validLimit}
 	if len(ack) != 0 {
-		args = append(args, map[string]any{acknowledgedField: cast.ToBool(ack)})
+		args[jsonContentCondition] = map[string]any{acknowledgedField: cast.ToBool(ack)}
 	} else {
-		args = append(args, map[string]any{})
+		args[jsonContentCondition] = map[string]any{}
 	}
 	whereCategoryStatement := ""
 	if len(condition.Category) != 0 {
-		whereCategoryStatement = fmt.Sprintf("AND (content ->> '%s') = ANY($4)", categoryField)
-		args = append(args, condition.Category)
+		whereCategoryStatement = fmt.Sprintf("AND (content ->> '%s') = ANY(@%s)", categoryField, categoryCondition)
+		args[categoryCondition] = condition.Category
 	}
-	args = append(args, offset, validLimit)
 
 	sql := fmt.Sprintf(
 		`SELECT content FROM %s 
-               WHERE COALESCE((content->>'%s')::bigint, 0) BETWEEN $1 AND $2 
-               AND content @> $3::jsonb 
+               WHERE COALESCE((content->>'%s')::bigint, 0) BETWEEN @%s AND @%s 
+               AND content @> @%s::jsonb 
                %s
                ORDER BY COALESCE((content->>'%s')::bigint, 0) 
-               OFFSET $%d LIMIT $%d`,
-		notificationTableName, createdField, whereCategoryStatement, createdField, len(args)-1, len(args))
+               OFFSET @%s LIMIT @%s`,
+		notificationTableName, createdField, startTimeCondition, endTimeCondition, jsonContentCondition,
+		whereCategoryStatement, createdField, offsetCondition, limitCondition)
 
-	notifications, err := queryNotifications(context.Background(), connPool, sql, args...)
+	notifications, err := queryNotifications(context.Background(), connPool, sql, args)
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all notifications by query conditions", err)
 	}

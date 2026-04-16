@@ -63,14 +63,18 @@ func NewDatabase(httpServer httpServer, database bootstrapInterfaces.Database, d
 func (d Database) newDBClient(
 	ctx context.Context,
 	lc logger.LoggingClient,
+	dic *di.Container,
 	credentials bootstrapConfig.Credentials) (interfaces.DBClient, error) {
 	databaseInfo := d.database.GetDatabaseInfo()
 
 	databaseConfig := db.Configuration{
-		Host:     databaseInfo.Host,
-		Port:     databaseInfo.Port,
-		Password: credentials.Password,
-		Timeout:  databaseInfo.Timeout,
+		Host:            databaseInfo.Host,
+		Port:            databaseInfo.Port,
+		Password:        credentials.Password,
+		Timeout:         databaseInfo.Timeout,
+		MaxConns:        databaseInfo.MaxConns,
+		MaxConnIdleTime: databaseInfo.MaxConnIdleTime,
+		MaxConnLifetime: databaseInfo.MaxConnLifetime,
 	}
 
 	switch databaseInfo.Type {
@@ -78,7 +82,7 @@ func (d Database) newDBClient(
 		return redis.NewClient(databaseConfig, lc)
 	case postgresDBType:
 		databaseConfig.Username = credentials.Username
-		return postgres.NewClient(ctx, databaseConfig, lc, d.schemaName, d.serviceKey, d.serviceVersion, d.sqlFiles)
+		return postgres.NewClient(ctx, databaseConfig, lc, dic, d.schemaName, d.serviceKey, d.serviceVersion, d.sqlFiles)
 	default:
 		return nil, db.ErrUnsupportedDatabase
 	}
@@ -133,7 +137,7 @@ func (d Database) BootstrapHandler(
 
 	for startupTimer.HasNotElapsed() {
 		var err error
-		dbClient, err = d.newDBClient(ctx, lc, credentials)
+		dbClient, err = d.newDBClient(ctx, lc, dic, credentials)
 		if err == nil {
 			break
 		}

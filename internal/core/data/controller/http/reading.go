@@ -1,42 +1,48 @@
 //
-// Copyright (C) 2021-2023 IOTech Ltd
+// Copyright (C) 2021-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package http
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http"
 
 	"github.com/edgexfoundry/edgex-go/internal/core/data/application"
 	dataContainer "github.com/edgexfoundry/edgex-go/internal/core/data/container"
+	"github.com/edgexfoundry/edgex-go/internal/core/data/query"
 	"github.com/edgexfoundry/edgex-go/internal/io"
 	"github.com/edgexfoundry/edgex-go/internal/pkg"
 	"github.com/edgexfoundry/edgex-go/internal/pkg/utils"
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/bootstrap/container"
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/di"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/dtos"
 	commonDTO "github.com/edgexfoundry/go-mod-core-contracts/v4/dtos/common"
 	responseDTO "github.com/edgexfoundry/go-mod-core-contracts/v4/dtos/responses"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/errors"
 
 	"github.com/labstack/echo/v4"
+	"github.com/spf13/cast"
 )
-
-const minOffset = -1 // allow using -1 to query reading data and skip the total count for pagination
 
 type ReadingController struct {
 	reader io.DtoReader
 	dic    *di.Container
+	app    *application.CoreDataApp
 }
 
 // NewReadingController creates and initializes a ReadingController
 func NewReadingController(dic *di.Container) *ReadingController {
+	app := application.CoreDataAppFrom(dic.Get)
 	return &ReadingController{
 		reader: io.NewJsonDtoReader(),
 		dic:    dic,
+		app:    app,
 	}
 }
 
@@ -49,7 +55,7 @@ func (rc *ReadingController) ReadingTotalCount(c echo.Context) error {
 	ctx := r.Context()
 
 	// Count readings
-	count, err := application.ReadingTotalCount(rc.dic)
+	count, err := rc.app.ReadingTotalCount(rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -71,7 +77,20 @@ func (rc *ReadingController) AllReadings(c echo.Context) error {
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.AllReadings(offset, limit, rc.dic)
+	parms := query.Parameters{
+		Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AllAggregateReadings(aggFunc, rc.dic, parms)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.AllReadings(parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -93,7 +112,20 @@ func (rc *ReadingController) ReadingsByTimeRange(c echo.Context) error {
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.ReadingsByTimeRange(start, end, offset, limit, rc.dic)
+	parms := query.Parameters{
+		Start: start, End: end, Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AllAggregateReadingsByTimeRange(aggFunc, parms, rc.dic)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByTimeRange(parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -117,7 +149,20 @@ func (rc *ReadingController) ReadingsByResourceName(c echo.Context) error {
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.ReadingsByResourceName(offset, limit, resourceName, rc.dic)
+	parms := query.Parameters{
+		Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByResourceName(resourceName, aggFunc, rc.dic, parms)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByResourceName(parms, resourceName, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -141,7 +186,20 @@ func (rc *ReadingController) ReadingsByDeviceName(c echo.Context) error {
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.ReadingsByDeviceName(offset, limit, name, rc.dic)
+	parms := query.Parameters{
+		Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByDeviceName(name, aggFunc, rc.dic, parms)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByDeviceName(parms, name, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -162,7 +220,7 @@ func (rc *ReadingController) ReadingCountByDeviceName(c echo.Context) error {
 	deviceName := c.Param(common.Name)
 
 	// Count the event by device
-	count, err := application.ReadingCountByDeviceName(deviceName, rc.dic)
+	count, err := rc.app.ReadingCountByDeviceName(deviceName, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -187,7 +245,20 @@ func (rc *ReadingController) ReadingsByResourceNameAndTimeRange(c echo.Context) 
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.ReadingsByResourceNameAndTimeRange(resourceName, start, end, offset, limit, rc.dic)
+	parms := query.Parameters{
+		Start: start, End: end, Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByResourceNameAndTimeRange(resourceName, aggFunc, parms, rc.dic)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByResourceNameAndTimeRange(resourceName, parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -212,7 +283,20 @@ func (rc *ReadingController) ReadingsByDeviceNameAndResourceName(c echo.Context)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	readings, totalCount, err := application.ReadingsByDeviceNameAndResourceName(deviceName, resourceName, offset, limit, rc.dic)
+	parms := query.Parameters{
+		Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByDeviceNameAndResourceName(deviceName, resourceName, aggFunc, rc.dic, parms)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByDeviceNameAndResourceName(deviceName, resourceName, parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -237,8 +321,20 @@ func (rc *ReadingController) ReadingsByDeviceNameAndResourceNameAndTimeRange(c e
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
+	parms := query.Parameters{
+		Start: start, End: end, Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
 
-	readings, totalCount, err := application.ReadingsByDeviceNameAndResourceNameAndTimeRange(deviceName, resourceName, start, end, offset, limit, rc.dic)
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByDeviceNameAndResourceNameAndTimeRange(deviceName, resourceName, aggFunc, parms, rc.dic)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
+	}
+
+	readings, totalCount, err := rc.app.ReadingsByDeviceNameAndResourceNameAndTimeRange(deviceName, resourceName, parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -261,6 +357,18 @@ func (rc *ReadingController) ReadingsByDeviceNameAndResourceNamesAndTimeRange(c 
 	start, end, offset, limit, err := utils.ParseTimeRangeOffsetLimit(c, minOffset, math.MaxInt32, -1, config.Service.MaxResultCount)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
+	}
+	parms := query.Parameters{
+		Start: start, End: end, Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	aggFuncParam := c.QueryParam(common.AggregateFunc)
+	if aggFuncParam != "" {
+		// Specify the app layer function to be invoked to get the aggregated reading values
+		aggReadingsFunc := func(aggFunc string) ([]dtos.BaseReading, errors.EdgeX) {
+			return rc.app.AggregateReadingsByDeviceNameAndTimeRange(deviceName, aggFunc, parms, rc.dic)
+		}
+		return handleReadingAggregation(w, ctx, lc, aggFuncParam, aggReadingsFunc)
 	}
 
 	var queryPayload map[string]interface{}
@@ -286,12 +394,36 @@ func (rc *ReadingController) ReadingsByDeviceNameAndResourceNamesAndTimeRange(c 
 		}
 	}
 
-	readings, totalCount, err := application.ReadingsByDeviceNameAndResourceNamesAndTimeRange(deviceName, resourceNames, start, end, offset, limit, rc.dic)
+	readings, totalCount, err := rc.app.ReadingsByDeviceNameAndResourceNamesAndTimeRange(deviceName, resourceNames, parms, rc.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
 
 	response := responseDTO.NewMultiReadingsResponse("", "", http.StatusOK, totalCount, readings)
+	utils.WriteHttpHeader(w, ctx, http.StatusOK)
+	return pkg.EncodeAndWriteResponse(response, w, lc)
+}
+
+// handleReadingAggregation parses the aggregateFunc query parameter, calls the provided application-layer function
+// to compute the aggregated reading values, and returns a MultiReadingsAggregationResponse DTO.
+func handleReadingAggregation(
+	w *echo.Response,
+	ctx context.Context,
+	lc logger.LoggingClient,
+	aggFuncParam string,
+	aggReadingFunc func(string) ([]dtos.BaseReading, errors.EdgeX),
+) error {
+	aggFunc, err := utils.ParseAggregateFuncQueryString(aggFuncParam)
+	if err != nil {
+		return utils.WriteErrorResponse(w, ctx, lc, err, "")
+	}
+
+	readings, err := aggReadingFunc(aggFunc)
+	if err != nil {
+		return utils.WriteErrorResponse(w, ctx, lc, err, "")
+	}
+
+	response := responseDTO.NewMultiReadingsAggregationResponse("", "", http.StatusOK, aggFuncParam, readings)
 	utils.WriteHttpHeader(w, ctx, http.StatusOK)
 	return pkg.EncodeAndWriteResponse(response, w, lc)
 }

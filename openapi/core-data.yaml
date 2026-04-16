@@ -20,7 +20,7 @@ components:
           $ref: '#/components/schemas/Event'
       required:
         - event
-    BaseReading:
+    Reading:
       description: "A base reading type containing common properties from which more specific reading types inherit. This definition should not be implemented but is used elsewhere to indicate support for a mixed list of simple/binary readings in a single event."
       type: object
       properties:
@@ -66,11 +66,22 @@ components:
             - Float32Array
             - Float64Array
             - Object
+        value:
+          description: "A string representation of the reading's value"
+          type: string
+        binaryValue:
+          description: "If the value of the reading is binary, it will be found in this property as a byte array"
+          type: string
+          format: byte
+        mediaType:
+          description: "E.g. MIME Type, indicates what the content type of the binaryValue property is if it's populated."
+          type: string
+        objectValue:
+          description: "If the value type of the reading is Object, it will be found in this property as a object value"
+          type: string
+          format: byte
       required:
-        - deviceName
         - resourceName
-        - profileName
-        - origin
         - valueType
     BaseRequest:
       description: "Defines basic properties which all use-case specific request DTO instances should support."
@@ -121,45 +132,6 @@ components:
         totalCount:
           description: "The total count of all multi instances."
           type: integer
-    SimpleReading:
-      description: "An event reading for a simple data type"
-      allOf:
-        - $ref: '#/components/schemas/BaseReading'
-        - type: object
-          properties:
-            value:
-              description: "A string representation of the reading's value"
-              type: string
-      required:
-        - value    
-    BinaryReading:
-      description: "An event reading for a binary data type"
-      allOf:
-        - $ref: '#/components/schemas/BaseReading'
-        - type: object
-          properties:
-            binaryValue:
-              description: "If the value of the reading is binary, it will be found in this property as a byte array"
-              type: string
-              format: byte
-            mediaType:
-              description: "E.g. MIME Type, indicates what the content type of the binaryValue property is if it's populated."
-              type: string
-          required:
-            - binaryValue
-            - mediaType
-    ObjectReading:
-      description: "An event reading for a object data type"
-      allOf:
-        - $ref: '#/components/schemas/BaseReading'
-        - type: object
-          properties:
-            objectValue:
-              description: "If the value type of the reading is Object, it will be found in this property as a object value"
-              type: string
-              format: byte
-          required:
-            - objectValue
     CountResponse:
       allOf:
         - $ref: '#/components/schemas/BaseResponse'
@@ -194,10 +166,7 @@ components:
           description: "One or more readings captured at the time of the event"
           type: array
           items:
-            oneOf:
-              - $ref: '#/components/schemas/SimpleReading'
-              - $ref: '#/components/schemas/BinaryReading'
-              - $ref: '#/components/schemas/ObjectReading'
+            $ref: '#/components/schemas/Reading'
           example: [
             {
                 "deviceName": "Random-Boolean-Device",
@@ -281,7 +250,7 @@ components:
         readings:
           type: array
           items:
-            $ref: '#/components/schemas/BaseReading'
+            $ref: '#/components/schemas/Reading'
     PingResponse:
       type: object
       properties:
@@ -348,9 +317,9 @@ components:
       required: false
       schema:
         type: integer
-        minimum: 0
+        minimum: -1
         default: 0
-      description: "The number of items to skip before starting to collect the result set."
+      description: "The number of items to skip before starting to collect the result set. Setting this value to -1 will skip counting the total number of events or readings, which can improve performance when working with large datasets."
     limitParam:
       in: query
       name: limit
@@ -360,6 +329,34 @@ components:
         minimum: -1
         default: 20
       description: "The numbers of items to return.  Specify -1 will return all remaining items after offset.  The maximum will be the MaxResultCount as defined in the configuration of service."
+    numericParam:
+      in: query
+      name: numeric
+      required: false
+      schema:
+        type: string
+        enum:
+          - true
+          - false
+        default: false
+      description: "When set to true, the reading’s numeric value is returned as a number instead of a string. However, due to JSON limitations described in https://www.rfc-editor.org/rfc/rfc8259.html#section-6, precision may be lost when handling large numbers that exceed the float64 range (−2^53 to 2^53 for integers, 0 to 2^53 for unsigned integers). To prevent precision loss, it is recommended to use the string format"
+    aggregateFuncParam:
+      in: query
+      name: aggregateFunc
+      required: false
+      schema:
+        type: string
+        enum:
+          - MIN
+          - MAX
+          - COUNT
+          - SUM
+          - AVG
+      description: |
+        Specifies the SQL aggregate function to apply when calculating reading values. 
+        Accepted values are MIN, MAX, COUNT, SUM, and AVG (case insensitive). 
+        Aggregation is only performed on numeric fields in the database. 
+        For non-numeric fields (e.g., String, Bool), the calculated result will be empty.
     correlatedRequestHeader:
       in: header
       name: X-Correlation-ID
@@ -555,6 +552,70 @@ components:
             origin: 1602168089665565300
             valueType: "Uint8"
             value: "77"
+    AllAggReadingsExample:
+      value:
+        apiVersion: "v3"
+        statusCode: 200
+        aggregateFunc: SUM
+        readings:
+          - deviceName: "Random-Integer-Device"
+            resourceName: "Int8"
+            profileName: "Random-Integer-Device"
+            valueType: "Int64"
+            value: 75
+          - deviceName: "Random-Float-Device"
+            resourceName: "Float32"
+            profileName: "Random-Float-Device"
+            valueType: "Float64"
+            value: 112.2
+          - deviceName: "Random-String-Device"
+            resourceName: "String"
+            profileName: "Random-String-Device"
+            valueType: "String"
+            value: ""
+    AggReadingsByResourceNameExample:
+      value:
+        apiVersion: "v3"
+        statusCode: 200
+        aggregateFunc: AVG
+        readings:
+          - deviceName: "Random-Integer-Device"
+            resourceName: "Int8"
+            profileName: "Random-Integer-Device"
+            valueType: "Float64"
+            value: 75.24
+          - deviceName: "Random-Integer-Device-2"
+            resourceName: "Int8"
+            profileName: "Random-Integer-Device-2"
+            valueType: "Float64"
+            value: 115.23
+    AggReadingsByDeviceNameExample:
+      value:
+        apiVersion: "v3"
+        statusCode: 200
+        aggregateFunc: SUM
+        readings:
+          - deviceName: "Random-Integer-Device"
+            resourceName: "Int8"
+            profileName: "Random-Integer-Device"
+            valueType: "Int64"
+            value: 75
+          - deviceName: "Random-Integer-Device"
+            resourceName: "Int16"
+            profileName: "Random-Integer-Device"
+            valueType: "Int64"
+            value: 25375
+    AggReadingsByDeviceAndResourceExample:
+      value:
+        apiVersion: "v3"
+        statusCode: 200
+        aggregateFunc: SUM
+        readings:
+          - deviceName: "Random-Integer-Device"
+            resourceName: "Int8"
+            profileName: "Random-Integer-Device"
+            valueType: "Int64"
+            value: 75
     ReadingsByResourceNameAndTimeRangeExample:
       value:
         apiVersion: "v3"
@@ -695,6 +756,7 @@ paths:
       - $ref: '#/components/parameters/correlatedRequestHeader'
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
     get:
       summary: "Given the entire range of events sorted by origin descending, returns a portion of that range according to the offset and limit parameters."
       responses:
@@ -925,6 +987,7 @@ paths:
           description: "Uniquely identifies a given device"
         - $ref: '#/components/parameters/offsetParam'
         - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/numericParam'
       responses:
         '200':
           description: "OK"
@@ -1030,6 +1093,7 @@ paths:
       description: "Unix timestamp (nanoseconds) indicating the end of a date/time range"
     - $ref: '#/components/parameters/offsetParam'
     - $ref: '#/components/parameters/limitParam'
+    - $ref: '#/components/parameters/numericParam'
     get:
       summary: "Return a paginated range of events sorted by origin descending with a create date inside the specified start/end values."
       responses:
@@ -1140,8 +1204,10 @@ paths:
       - $ref: '#/components/parameters/correlatedRequestHeader'
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
-      summary: "Given the entire range of readings sorted by origin descending, returns a portion of that range according to the offset and limit parameters. Readings returned will all inherit from BaseReading but their concrete types will be either SimpleReading or BinaryReading, potentially interleaved."
+      summary: "Given the entire range of readings sorted by origin descending, returns a portion of that range according to the offset and limit parameters. Readings are returned as a Reading type, which includes value for simple data types, binaryValue and mediaType for binary data types, or objectValue for object data types."
       responses:
         '200':
           description: "OK"
@@ -1155,6 +1221,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/AllReadingsExample'
+                MultiAggReadingsExample:
+                  $ref: '#/components/examples/AllAggReadingsExample'
         '400':
           description: "Request is in an invalid state"
           headers:
@@ -1282,6 +1350,8 @@ paths:
       description: "Uniquely identifies a given device"
     - $ref: '#/components/parameters/offsetParam'
     - $ref: '#/components/parameters/limitParam'
+    - $ref: '#/components/parameters/numericParam'
+    - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Given a range of readings from the specified device sorted by origin descending, returns a portion of that range according to the device name, offset and limit parameters."
       responses:
@@ -1297,6 +1367,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/AllReadingsExample'
+                MultiAggReadingsByDeviceExample:
+                  $ref: '#/components/examples/AggReadingsByDeviceNameExample'
         '400':
           description: "Request is in an invalid state"
           headers:
@@ -1346,6 +1418,8 @@ paths:
       description: The device resource name of readings.
     - $ref: '#/components/parameters/offsetParam'
     - $ref: '#/components/parameters/limitParam'
+    - $ref: '#/components/parameters/numericParam'
+    - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: Returns a paginated list of readings whose resource name is of the specified one.
       responses:
@@ -1361,6 +1435,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/AllReadingsExample'
+                MultiAggReadingsByResourceExample:
+                  $ref: '#/components/examples/AggReadingsByResourceNameExample'
         '400':
           description: "Request is in an invalid state. \"{resourceName}\" could only contain reserved characters as defined in https://tools.ietf.org/html/rfc3986#section-2.3"
           headers:
@@ -1418,6 +1494,8 @@ paths:
         description: The device resource name of readings.
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Returns a paginated range of readings by deviceName and resourceName"
       responses:
@@ -1433,6 +1511,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/AllReadingsExample'
+                MultiAggReadingsByDeviceAndResourceExample:
+                  $ref: '#/components/examples/AggReadingsByDeviceAndResourceExample'
         '400':
           description: "Request is in an invalid state."
           headers:
@@ -1490,6 +1570,8 @@ paths:
         description: "Unix timestamp (nanoseconds) indicating the end of a date/time range"
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Return a paginated range of readings with a create date inside the specified start/end values."
       responses:
@@ -1505,6 +1587,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/AllReadingsExample'
+                MultiAggReadingsExample:
+                  $ref: '#/components/examples/AllAggReadingsExample'
         '400':
           description: "\"{start}\" and \"{end}\" are unix time, and \"{end}\" should be greater than \"{start}\""
           headers:
@@ -1568,6 +1652,8 @@ paths:
         description: "Unix timestamp (nanoseconds) indicating the end of a date/time range"
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Return a paginated range of readings by resourceName and specified time range."
       responses:
@@ -1583,6 +1669,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/ReadingsByResourceNameAndTimeRangeExample'
+                MultiAggReadingsByResourceExample:
+                  $ref: '#/components/examples/AggReadingsByResourceNameExample'
         '400':
           description: "\"{start}\" and \"{end}\" are unix time, and \"{end}\" should be greater than \"{start}\""
           headers:
@@ -1652,6 +1740,8 @@ paths:
         description: "Unix timestamp (nanoseconds) indicating the end of a date/time range"
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Return a paginated range of readings by deviceName, resourceName and specified time range."
       responses:
@@ -1667,6 +1757,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/ReadingsByResourceNameAndTimeRangeExample'
+                MultiAggReadingsByDeviceAndResourceExample:
+                  $ref: '#/components/examples/AggReadingsByDeviceAndResourceExample'
         '400':
           description: "Request is in an invalid state."
           headers:
@@ -1730,18 +1822,10 @@ paths:
         description: "Unix timestamp (nanoseconds) indicating the end of a date/time range"
       - $ref: '#/components/parameters/offsetParam'
       - $ref: '#/components/parameters/limitParam'
+      - $ref: '#/components/parameters/numericParam'
+      - $ref: '#/components/parameters/aggregateFuncParam'
     get:
       summary: "Return a paginated range of readings by deviceName and specified time range while also allowing multiple resource names specified in the request body as query criteria.  If resource names or request body is empty, return all the readings that meet deviceName and specified time range."
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddEventRequest'
-            example:
-              resourceNames:
-                - resource-001
-                - resource-002
       responses:
         '200':
           description: "OK"
@@ -1755,6 +1839,8 @@ paths:
               examples:
                 MultiReadingsExample:
                   $ref: '#/components/examples/ReadingsByResourceNameAndTimeRangeExample'
+                MultiAggReadingsByDeviceExample:
+                  $ref: '#/components/examples/AggReadingsByDeviceNameExample'
         '400':
           description: "Request is in an invalid state."
           headers:

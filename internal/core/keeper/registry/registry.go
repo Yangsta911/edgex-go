@@ -114,7 +114,6 @@ preServiceUpLoop:
 			if h.registry.Status == models.Up {
 				break preServiceUpLoop
 			}
-			break
 		}
 	}
 
@@ -161,6 +160,13 @@ func healthCheck(r models.Registration, lc logger.LoggingClient, timeout time.Du
 		lc.Errorf("Failed to health check service %s: %s", r.ServiceId, err.Error())
 		return models.Down
 	}
+
+	// Ensure response body is always closed to prevent resource leaks
+	defer func() {
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		lc.Debugf("service %s status healthy", r.ServiceId)

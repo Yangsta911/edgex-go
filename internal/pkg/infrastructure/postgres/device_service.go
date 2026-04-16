@@ -122,7 +122,8 @@ func (c *Client) AllDeviceServices(offset int, limit int, labels []string) (devi
 	if len(labels) > 0 {
 		c.loggingClient.Debugf("Querying device services by labels: %v", labels)
 		queryObj := map[string]any{labelsField: labels}
-		deviceServices, err = queryDeviceServices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPagination(deviceServiceTableName), queryObj, offset, validLimit)
+		deviceServices, err = queryDeviceServices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(deviceServiceTableName),
+			pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 		if err != nil {
 			return deviceServices, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all device services by labels", err)
 		}
@@ -166,7 +167,7 @@ func (c *Client) UpdateDeviceService(ds model.DeviceService) errors.EdgeX {
 }
 
 // DeviceServiceCountByLabels returns the total count of Device Services with labels specified.  If no label is specified, the total count of all device services will be returned.
-func (c *Client) DeviceServiceCountByLabels(labels []string) (uint32, errors.EdgeX) {
+func (c *Client) DeviceServiceCountByLabels(labels []string) (int64, errors.EdgeX) {
 	ctx := context.Background()
 
 	if len(labels) > 0 {

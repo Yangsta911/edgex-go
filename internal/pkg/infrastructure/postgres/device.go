@@ -80,7 +80,8 @@ func (c *Client) DevicesByServiceName(offset int, limit int, name string) ([]mod
 	ctx := context.Background()
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 	queryObj := map[string]any{serviceNameField: name}
-	return queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPagination(deviceTableName), queryObj, offset, validLimit)
+	return queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(deviceTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 }
 
 // DeviceIdExists checks the device existence by id
@@ -132,12 +133,14 @@ func (c *Client) AllDevices(offset int, limit int, labels []string) (devices []m
 	if len(labels) > 0 {
 		c.loggingClient.Debugf("Querying devices by labels: %v", labels)
 		queryObj := map[string]any{labelsField: labels}
-		devices, err = queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPagination(deviceTableName), queryObj, offset, validLimit)
+		devices, err = queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(deviceTableName),
+			pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 		if err != nil {
 			return devices, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all devices by labels", err)
 		}
 	} else {
-		devices, err = queryDevices(ctx, c.ConnPool, sqlQueryContentWithPagination(deviceTableName), offset, validLimit)
+		devices, err = queryDevices(ctx, c.ConnPool, sqlQueryContentWithPaginationAsNamedArgs(deviceTableName),
+			pgx.NamedArgs{offsetCondition: offset, limitCondition: validLimit})
 		if err != nil {
 			return devices, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all devices", err)
 		}
@@ -151,7 +154,8 @@ func (c *Client) DevicesByProfileName(offset int, limit int, profileName string)
 	ctx := context.Background()
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 	queryObj := map[string]any{profileNameField: profileName}
-	return queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPagination(deviceTableName), queryObj, offset, validLimit)
+	return queryDevices(ctx, c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(deviceTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 }
 
 // UpdateDevice updates a device
@@ -184,7 +188,7 @@ func (c *Client) UpdateDevice(d model.Device) errors.EdgeX {
 }
 
 // DeviceCountByLabels returns the total count of Devices with labels specified.  If no label is specified, the total count of all devices will be returned.
-func (c *Client) DeviceCountByLabels(labels []string) (uint32, errors.EdgeX) {
+func (c *Client) DeviceCountByLabels(labels []string) (int64, errors.EdgeX) {
 	ctx := context.Background()
 
 	if len(labels) > 0 {
@@ -195,14 +199,14 @@ func (c *Client) DeviceCountByLabels(labels []string) (uint32, errors.EdgeX) {
 }
 
 // DeviceCountByProfileName returns the count of Devices associated with specified profile
-func (c *Client) DeviceCountByProfileName(profileName string) (uint32, errors.EdgeX) {
+func (c *Client) DeviceCountByProfileName(profileName string) (int64, errors.EdgeX) {
 	ctx := context.Background()
 	queryObj := map[string]any{profileNameField: profileName}
 	return getTotalRowsCount(ctx, c.ConnPool, sqlQueryCountByJSONField(deviceTableName), queryObj)
 }
 
 // DeviceCountByServiceName returns the count of Devices associated with specified service
-func (c *Client) DeviceCountByServiceName(serviceName string) (uint32, errors.EdgeX) {
+func (c *Client) DeviceCountByServiceName(serviceName string) (int64, errors.EdgeX) {
 	ctx := context.Background()
 	queryObj := map[string]any{serviceNameField: serviceName}
 	return getTotalRowsCount(ctx, c.ConnPool, sqlQueryCountByJSONField(deviceTableName), queryObj)
@@ -247,7 +251,7 @@ func deviceSubTree(ctx context.Context, connPool *pgxpool.Pool, parent string, l
 
 // Get the full result-set since that's the only way to correctly get totalCount.
 // Then return the subset of the result-set that corresponds to the requested offset and limit.
-func (c *Client) DeviceTree(parent string, levels int, offset int, limit int, labels []string) (uint32, []model.Device, errors.EdgeX) {
+func (c *Client) DeviceTree(parent string, levels int, offset int, limit int, labels []string) (int64, []model.Device, errors.EdgeX) {
 	var maxLevels int
 	var emptyList = []model.Device{}
 	if levels <= 0 {
@@ -255,21 +259,21 @@ func (c *Client) DeviceTree(parent string, levels int, offset int, limit int, la
 	} else {
 		maxLevels = levels
 	}
-	all_devices, err := deviceSubTree(context.Background(), c.ConnPool, parent, maxLevels, labels)
+	allDevices, err := deviceSubTree(context.Background(), c.ConnPool, parent, maxLevels, labels)
 	if err != nil {
 		return 0, emptyList, err
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	if offset >= len(all_devices) {
-		return uint32(len(all_devices)), emptyList, nil
+	if offset >= len(allDevices) {
+		return int64(len(allDevices)), emptyList, nil
 	}
-	numToReturn := len(all_devices) - offset
+	numToReturn := len(allDevices) - offset
 	if limit > 0 && limit < numToReturn {
 		numToReturn = limit
 	}
-	return uint32(len(all_devices)), all_devices[offset : offset+numToReturn], nil
+	return int64(len(allDevices)), allDevices[offset : offset+numToReturn], nil
 }
 
 func deviceNameExists(ctx context.Context, connPool *pgxpool.Pool, name string) (bool, errors.EdgeX) {
@@ -296,7 +300,7 @@ func queryOneDevice(ctx context.Context, connPool *pgxpool.Pool, sql string, arg
 	row := connPool.QueryRow(ctx, sql, args...)
 
 	if err := row.Scan(&d); err != nil {
-		return d, pgClient.WrapDBError("failed to query devicee", err)
+		return d, pgClient.WrapDBError("failed to query device", err)
 	}
 	return d, nil
 }

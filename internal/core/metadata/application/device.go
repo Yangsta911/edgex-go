@@ -82,7 +82,7 @@ func AddDevice(d models.Device, ctx context.Context, dic *di.Container, bypassVa
 
 	// Execute the Device Service Validation when both bypassValidation/force values are false by default
 	// Skip the Device Service Validation if either bypassValidation or force is true
-	if !(bypassValidation || force) {
+	if !bypassValidation && !force { // Per De Morgan's law, !(A || B) is equivalent to !A && !B
 		err = validateDeviceCallback(dtos.FromDeviceModelToDTO(d), dic)
 		if err != nil {
 			return "", errors.NewCommonEdgeXWrapper(err)
@@ -179,7 +179,7 @@ func DeleteDeviceByName(name string, ctx context.Context, dic *di.Container) err
 }
 
 // DevicesByServiceName query devices with offset, limit and name
-func DevicesByServiceName(offset int, limit int, name string, ctx context.Context, dic *di.Container) (devices []dtos.Device, totalCount uint32, err errors.EdgeX) {
+func DevicesByServiceName(offset int, limit int, name string, ctx context.Context, dic *di.Container) (devices []dtos.Device, totalCount int64, err errors.EdgeX) {
 	if name == "" {
 		return devices, totalCount, errors.NewCommonEdgeX(errors.KindContractInvalid, "name is empty", nil)
 	}
@@ -321,7 +321,7 @@ func deviceByDTO(dbClient interfaces.DBClient, dto dtos.UpdateDevice) (device mo
 }
 
 // AllDevices query the devices with offset, limit, and labels
-func AllDevices(offset int, limit int, labels []string, parent string, maxLevels int, dic *di.Container) (devices []dtos.Device, totalCount uint32, err errors.EdgeX) {
+func AllDevices(offset int, limit int, labels []string, parent string, maxLevels int, dic *di.Container) (devices []dtos.Device, totalCount int64, err errors.EdgeX) {
 	dbClient := container.DBClientFrom(dic.Get)
 	var deviceModels []models.Device
 	if parent != "" {
@@ -367,7 +367,7 @@ func DeviceByName(name string, dic *di.Container) (device dtos.Device, err error
 }
 
 // DevicesByProfileName query the devices with offset, limit, and profile name
-func DevicesByProfileName(offset int, limit int, profileName string, dic *di.Container) (devices []dtos.Device, totalCount uint32, err errors.EdgeX) {
+func DevicesByProfileName(offset int, limit int, profileName string, dic *di.Container) (devices []dtos.Device, totalCount int64, err errors.EdgeX) {
 	if profileName == "" {
 		return devices, totalCount, errors.NewCommonEdgeX(errors.KindContractInvalid, "profileName is empty", nil)
 	}
@@ -393,7 +393,7 @@ func DevicesByProfileName(offset int, limit int, profileName string, dic *di.Con
 	return devices, totalCount, nil
 }
 
-var noMessagingClientError = goErrors.New("MessageBus Client not available. Please update RequireMessageBus and MessageBus configuration to enable sending System Events via the EdgeX MessageBus")
+var errNoMessagingClient = goErrors.New("MessageBus Client not available. Please update RequireMessageBus and MessageBus configuration to enable sending System Events via the EdgeX MessageBus")
 
 func validateParentProfileAndAutoEvent(dic *di.Container, d models.Device) errors.EdgeX {
 	if d.ProfileName == "" {

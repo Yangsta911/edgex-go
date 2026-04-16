@@ -36,7 +36,9 @@ func TestGeneratePostgresScript(t *testing.T) {
 
 	inputFile, err := os.Open(fileName)
 	require.NoError(t, err)
-	defer inputFile.Close()
+	defer func(inputFile *os.File) {
+		_ = inputFile.Close()
+	}(inputFile)
 
 	inputScanner := bufio.NewScanner(inputFile)
 	inputScanner.Split(bufio.ScanLines)
@@ -50,7 +52,7 @@ func TestGeneratePostgresScript(t *testing.T) {
 	}
 
 	expectedCreateScript := fmt.Sprintf("CREATE USER \"%s\" with PASSWORD '%s';", mockUsername, mockPassword)
-	require.Equal(t, 17, len(outputlines))
+	require.Equal(t, 18, len(outputlines))
 	require.Equal(t, expectedCreateScript, strings.TrimSpace(outputlines[11]))
 }
 

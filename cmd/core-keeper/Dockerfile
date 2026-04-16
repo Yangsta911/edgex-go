@@ -16,8 +16,10 @@
 #  ----------------------------------------------------------------------------------
 
 # Docker image for Golang Core Keeper micro service
-ARG BUILDER_BASE=golang:1.23-alpine3.20
+ARG BUILDER_BASE=golang:1.25-alpine3.22
 FROM ${BUILDER_BASE} AS builder
+
+ARG ADD_BUILD_TAGS=""
 
 WORKDIR /edgex-go
 
@@ -32,10 +34,10 @@ COPY go.mod vendor* ./
 RUN [ ! -d "vendor" ] && go mod download all || echo "skipping..."
 
 COPY . .
-RUN make cmd/core-keeper/core-keeper
+RUN make -e ADD_BUILD_TAGS=$ADD_BUILD_TAGS cmd/core-keeper/core-keeper
 
 #Next image - Copy built Go binary into new workspace
-FROM alpine:3.20
+FROM alpine:3.22
 
 LABEL license='SPDX-License-Identifier: Apache-2.0' \
       copyright='Copyright (c) 2024: IOTech'

@@ -9,24 +9,24 @@ package application
 import (
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edgexfoundry/edgex-go/internal/core/data/config"
 	"github.com/edgexfoundry/edgex-go/internal/core/data/container"
 	dbMock "github.com/edgexfoundry/edgex-go/internal/core/data/infrastructure/interfaces/mocks"
 	"github.com/edgexfoundry/edgex-go/internal/core/data/mocks"
+	"github.com/edgexfoundry/edgex-go/internal/core/data/query"
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/di"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/dtos"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 )
 
 func TestAllReadings(t *testing.T) {
 	readings := buildReadings()
-	totalCount := uint32(len(readings))
+	totalCount := int64(len(readings))
 
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
@@ -39,6 +39,8 @@ func TestAllReadings(t *testing.T) {
 		},
 	})
 
+	app := NewCoreDataApp(dic)
+
 	tests := []struct {
 		name               string
 		offset             int
@@ -46,7 +48,7 @@ func TestAllReadings(t *testing.T) {
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - all readings", 0, 20, false, "", len(readings), totalCount, http.StatusOK},
@@ -54,7 +56,7 @@ func TestAllReadings(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			readings, total, err := AllReadings(testCase.offset, testCase.limit, dic)
+			readings, total, err := app.AllReadings(query.Parameters{Offset: testCase.offset, Limit: testCase.limit}, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")
@@ -71,8 +73,8 @@ func TestAllReadings(t *testing.T) {
 
 func TestReadingsByTimeRange(t *testing.T) {
 	readings := buildReadings()
-	totalCount5 := uint32(5)
-	totalCount3 := uint32(3)
+	totalCount5 := int64(5)
+	totalCount3 := int64(3)
 
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
@@ -88,6 +90,8 @@ func TestReadingsByTimeRange(t *testing.T) {
 		},
 	})
 
+	app := NewCoreDataApp(dic)
+
 	tests := []struct {
 		name               string
 		start              int64
@@ -97,17 +101,17 @@ func TestReadingsByTimeRange(t *testing.T) {
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - all readings", readings[0].GetBaseReading().Origin, readings[4].GetBaseReading().Origin, 0, 10, false, "", 5, totalCount5, http.StatusOK},
 		{"Valid - readings trimmed by latest and oldest", readings[1].GetBaseReading().Origin, readings[3].GetBaseReading().Origin, 0, 10, false, "", 3, totalCount3, http.StatusOK},
 		{"Valid - readings trimmed by latest and oldest and skipped first", readings[1].GetBaseReading().Origin, readings[3].GetBaseReading().Origin, 1, 2, false, "", 2, totalCount3, http.StatusOK},
-		{"Invalid - bounds out of range", readings[1].GetBaseReading().Origin, readings[3].GetBaseReading().Origin, 4, 2, true, errors.KindRangeNotSatisfiable, 0, uint32(0), http.StatusRequestedRangeNotSatisfiable},
+		{"Invalid - bounds out of range", readings[1].GetBaseReading().Origin, readings[3].GetBaseReading().Origin, 4, 2, true, errors.KindRangeNotSatisfiable, 0, int64(0), http.StatusRequestedRangeNotSatisfiable},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			readings, totalCount, err := ReadingsByTimeRange(testCase.start, testCase.end, testCase.offset, testCase.limit, dic)
+			readings, totalCount, err := app.ReadingsByTimeRange(query.Parameters{Start: testCase.start, End: testCase.end, Offset: testCase.offset, Limit: testCase.limit}, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")
@@ -124,7 +128,7 @@ func TestReadingsByTimeRange(t *testing.T) {
 
 func TestReadingsByResourceName(t *testing.T) {
 	readings := buildReadings()
-	totalCount := uint32(len(readings))
+	totalCount := int64(len(readings))
 
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
@@ -137,6 +141,8 @@ func TestReadingsByResourceName(t *testing.T) {
 		},
 	})
 
+	app := NewCoreDataApp(dic)
+
 	tests := []struct {
 		name               string
 		offset             int
@@ -145,7 +151,7 @@ func TestReadingsByResourceName(t *testing.T) {
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - all readings", 0, 20, testDeviceResourceName, false, "", len(readings), totalCount, http.StatusOK},
@@ -154,7 +160,7 @@ func TestReadingsByResourceName(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			readings, total, err := ReadingsByResourceName(testCase.offset, testCase.limit, testCase.resourceName, dic)
+			readings, total, err := app.ReadingsByResourceName(query.Parameters{Offset: testCase.offset, Limit: testCase.limit}, testCase.resourceName, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")
@@ -171,7 +177,7 @@ func TestReadingsByResourceName(t *testing.T) {
 
 func TestReadingsByDeviceName(t *testing.T) {
 	readings := buildReadings()
-	totalCount := uint32(len(readings))
+	totalCount := int64(len(readings))
 
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
@@ -184,6 +190,8 @@ func TestReadingsByDeviceName(t *testing.T) {
 		},
 	})
 
+	app := NewCoreDataApp(dic)
+
 	tests := []struct {
 		name               string
 		offset             int
@@ -192,7 +200,7 @@ func TestReadingsByDeviceName(t *testing.T) {
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - all readings", 0, 20, testDeviceName, false, "", len(readings), totalCount, http.StatusOK},
@@ -200,7 +208,7 @@ func TestReadingsByDeviceName(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			readings, total, err := ReadingsByDeviceName(testCase.offset, testCase.limit, testCase.deviceName, dic)
+			readings, total, err := app.ReadingsByDeviceName(query.Parameters{Offset: testCase.offset, Limit: testCase.limit}, testCase.deviceName, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")
@@ -216,7 +224,7 @@ func TestReadingsByDeviceName(t *testing.T) {
 }
 
 func TestReadingCountByDeviceName(t *testing.T) {
-	expectedReadingCount := uint32(656672)
+	expectedReadingCount := int64(656672)
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
 	dbClientMock.On("ReadingCountByDeviceName", testDeviceName).Return(expectedReadingCount, nil)
@@ -226,12 +234,14 @@ func TestReadingCountByDeviceName(t *testing.T) {
 		},
 	})
 
+	app := NewCoreDataApp(dic)
+
 	tests := []struct {
 		name               string
 		deviceName         string
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
-		expectedCount      uint32
+		expectedCount      int64
 		expectedStatusCode int
 	}{
 		{"Valid - all readings", testDeviceName, false, "", expectedReadingCount, http.StatusOK},
@@ -239,7 +249,7 @@ func TestReadingCountByDeviceName(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			count, err := ReadingCountByDeviceName(testCase.deviceName, dic)
+			count, err := app.ReadingCountByDeviceName(testCase.deviceName, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")
@@ -253,113 +263,70 @@ func TestReadingCountByDeviceName(t *testing.T) {
 	}
 }
 
-func TestPurgeEvent(t *testing.T) {
-	dic := mocks.NewMockDIC()
-	deviceName := "testDevice"
-	sourceName := "testSource"
-	coreDataConfig := container.ConfigurationFrom(dic.Get)
-	coreDataConfig.Retention = config.EventRetention{
-		Interval:        "10m",
-		DefaultMaxCap:   -1,
-		DefaultMinCap:   1,
-		DefaultDuration: "30m",
-	}
-	dic.Update(di.ServiceConstructorMap{
-		container.ConfigurationName: func(get di.Get) interface{} {
-			return coreDataConfig
-		},
-	})
-
-	dbClientMock := &dbMock.DBClient{}
-	dbClientMock.On("LatestEventByDeviceNameAndSourceNameAndAgeAndOffset", deviceName, sourceName, mock.Anything, mock.Anything).Return(models.Event{}, nil)
-	dbClientMock.On("DeleteEventsByAgeAndDeviceNameAndSourceName", mock.Anything, deviceName, sourceName).Return(nil)
-	dbClientMock.On("DeleteEventsByDeviceNameAndSourceName", deviceName, sourceName).Return(nil)
-	dbClientMock.On("LatestEventByDeviceNameAndSourceNameAndOffset", deviceName, sourceName, mock.Anything).Return(models.Event{}, nil)
-	dic.Update(di.ServiceConstructorMap{
-		container.DBClientInterfaceName: func(get di.Get) interface{} {
-			return dbClientMock
-		},
-	})
-
-	tests := []struct {
+func TestProcessNumericReadings_SimpleReadingToNumeric(t *testing.T) {
+	test := []struct {
 		name      string
-		autoEvent models.AutoEvent
+		valueType string
+		value     any
+		expected  any
 	}{
-		{"time-based event retention",
-			models.AutoEvent{
-				Interval:          "",
-				OnChange:          false,
-				OnChangeThreshold: 0,
-				SourceName:        sourceName,
-				Retention: models.Retention{
-					MaxCap:   -1,
-					MinCap:   -1,
-					Duration: "10m",
-				},
-			},
-		},
-		{"time-based event retention with miniCap",
-			models.AutoEvent{
-				Interval:          "",
-				OnChange:          false,
-				OnChangeThreshold: 0,
-				SourceName:        sourceName,
-				Retention: models.Retention{
-					MaxCap:   -1,
-					MinCap:   1,
-					Duration: "10m",
-				},
-			},
-		},
-		{"count-based event retention",
-			models.AutoEvent{
-				Interval:          "",
-				OnChange:          false,
-				OnChangeThreshold: 0,
-				SourceName:        sourceName,
-				Retention: models.Retention{
-					MaxCap:   -1,
-					MinCap:   -1,
-					Duration: "0s",
-				},
-			},
-		},
-		{"count-based event retention with miniCap",
-			models.AutoEvent{
-				Interval:          "",
-				OnChange:          false,
-				OnChangeThreshold: 0,
-				SourceName:        sourceName,
-				Retention: models.Retention{
-					MaxCap:   -1,
-					MinCap:   1,
-					Duration: "0s",
-				},
-			},
-		},
+		{"int8 string to numeric", common.ValueTypeInt8, int8(123), int64(123)},
+		{"int16 string to numeric", common.ValueTypeInt16, int16(1234), int64(1234)},
+		{"int32 string to numeric", common.ValueTypeInt32, int32(12345), int64(12345)},
+		{"int64 string to numeric", common.ValueTypeInt64, int64(123456), int64(123456)},
+		{"uint8 string to numeric", common.ValueTypeUint8, uint8(123), uint64(123)},
+		{"uint16 string to numeric", common.ValueTypeUint16, uint16(1234), uint64(1234)},
+		{"uint32 string to numeric", common.ValueTypeUint32, uint32(12345), uint64(12345)},
+		{"uint64 string to numeric", common.ValueTypeUint64, uint64(123456), uint64(123456)},
+		{"float32 string to numeric", common.ValueTypeFloat32, float32(11.123), 11.123},
+		{"float64 string to numeric", common.ValueTypeFloat64, 11.123456, 11.123456},
+		{"int8Array string to numeric", common.ValueTypeInt8Array, []int8{12, 123}, []int64{12, 123}},
+		{"int16Array string to numeric", common.ValueTypeInt16Array, []int16{123, 1234}, []int64{123, 1234}},
+		{"int32Array string to numeric", common.ValueTypeInt32Array, []int32{1234, 12345}, []int64{1234, 12345}},
+		{"int64Array string to numeric", common.ValueTypeInt64Array, []int64{12345, 123456}, []int64{12345, 123456}},
+		{"uint8Array string to numeric", common.ValueTypeUint8Array, []uint8{12, 123}, []uint64{12, 123}},
+		{"uint16Array string to numeric", common.ValueTypeUint16Array, []uint16{123, 1234}, []uint64{123, 1234}},
+		{"uint32Array string to numeric", common.ValueTypeUint32Array, []uint32{1234, 12345}, []uint64{1234, 12345}},
+		{"uint64Array string to numeric", common.ValueTypeUint64Array, []uint64{12345, 123456}, []uint64{12345, 123456}},
+		{"float32Array string to numeric", common.ValueTypeFloat32Array, []float32{1.12, 11.123}, []float64{1.12, 11.123}},
+		{"float32Array string to numeric", common.ValueTypeFloat64Array, []float64{1.12, 11.123456}, []float64{1.12, 11.123456}},
 	}
-	for _, testCase := range tests {
+	for _, testCase := range test {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := purgeEvent(deviceName, testCase.autoEvent, dic)
+			r, err := dtos.NewSimpleReading(testProfileName, testDeviceName, testDeviceResourceName, testCase.valueType, testCase.value)
 			require.NoError(t, err)
-			duration, parseErr := time.ParseDuration(testCase.autoEvent.Retention.Duration)
-			require.NoError(t, parseErr)
-			if duration > 0 && testCase.autoEvent.Retention.MinCap <= 0 {
-				// time-based retention
-				dbClientMock.AssertCalled(t, "DeleteEventsByAgeAndDeviceNameAndSourceName", mock.Anything, deviceName, testCase.autoEvent.SourceName)
-			} else if duration > 0 && testCase.autoEvent.Retention.MinCap > 0 {
-				// time-based retention with miniCap
-				dbClientMock.AssertCalled(t, "LatestEventByDeviceNameAndSourceNameAndAgeAndOffset", deviceName, sourceName, duration.Nanoseconds(), uint32(testCase.autoEvent.Retention.MinCap))
-				dbClientMock.AssertCalled(t, "DeleteEventsByAgeAndDeviceNameAndSourceName", mock.Anything, deviceName, testCase.autoEvent.SourceName)
-			} else if testCase.autoEvent.Retention.MinCap <= 0 {
-				// count-based retention
-				dbClientMock.AssertCalled(t, "DeleteEventsByDeviceNameAndSourceName", deviceName, testCase.autoEvent.SourceName)
-			} else {
-				// count-based retention with miniCap
-				dbClientMock.AssertCalled(t, "LatestEventByDeviceNameAndSourceNameAndOffset", deviceName, sourceName, uint32(testCase.autoEvent.Retention.MinCap))
-				dbClientMock.AssertCalled(t, "DeleteEventsByAgeAndDeviceNameAndSourceName", mock.Anything, deviceName, testCase.autoEvent.SourceName)
-			}
+			readings := []dtos.BaseReading{r}
+			processNumericReadings(true, readings)
+			assert.Equal(t, testCase.expected, readings[0].NumericValue)
+		})
+	}
+}
 
+func TestProcessNumericReadings_NumericReadingToString(t *testing.T) {
+	test := []struct {
+		name      string
+		valueType string
+		value     any
+		expected  any
+	}{
+		{"int8 numeric to string", common.ValueTypeInt8, int8(123), "123"},
+		{"int16 numeric to string", common.ValueTypeInt16, int16(1234), "1234"},
+		{"int32 numeric to string", common.ValueTypeInt32, int32(12345), "12345"},
+		{"int64 numeric to string", common.ValueTypeInt64, int64(123456), "123456"},
+		{"uint8 numeric to string", common.ValueTypeUint8, uint8(123), "123"},
+		{"uint16 numeric to string", common.ValueTypeUint16, uint16(1234), "1234"},
+		{"uint32 numeric to string", common.ValueTypeUint32, uint32(12345), "12345"},
+		{"uint64 numeric to string", common.ValueTypeUint64, uint64(123456), "123456"},
+		{"float32 numeric to string", common.ValueTypeFloat32, float32(11.123), "1.1123e+01"},
+		{"float64 numeric to string", common.ValueTypeFloat64, 11.123456, "1.1123456e+01"},
+	}
+	for _, testCase := range test {
+		t.Run(testCase.name, func(t *testing.T) {
+			r := dtos.NewNumericReading(testProfileName, testDeviceName, testDeviceResourceName, testCase.valueType, testCase.value)
+			readings := []dtos.BaseReading{r}
+			processNumericReadings(false, readings)
+
+			assert.Equal(t, testCase.expected, readings[0].Value)
 		})
 	}
 }

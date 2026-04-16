@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2020-2021 IOTech Ltd
+// Copyright (C) 2020-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -19,6 +19,7 @@ import (
 	"github.com/edgexfoundry/edgex-go/internal/core/data/container"
 	dbMock "github.com/edgexfoundry/edgex-go/internal/core/data/infrastructure/interfaces/mocks"
 	"github.com/edgexfoundry/edgex-go/internal/core/data/mocks"
+	"github.com/edgexfoundry/edgex-go/internal/core/data/query"
 	pkgCommon "github.com/edgexfoundry/edgex-go/internal/pkg/common"
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/di"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/common"
@@ -34,7 +35,7 @@ const (
 	testUUIDString         = "ca93c8fa-9919-4ec5-85d3-f81b2b6a7bc1"
 	testOriginTime         = 1600666185705354000
 	nonexistentEventID     = "8ad33474-fbc5-11ea-adc1-0242ac120002"
-	testEventCount         = uint32(7778)
+	testEventCount         = int64(7778)
 )
 
 var persistedEvent = models.Event{
@@ -410,9 +411,9 @@ func TestEventsByTimeRange(t *testing.T) {
 
 	dic := mocks.NewMockDIC()
 	dbClientMock := &dbMock.DBClient{}
-	dbClientMock.On("EventCountByTimeRange", event1.Origin, event5.Origin).Return(uint32(5), nil)
+	dbClientMock.On("EventCountByTimeRange", event1.Origin, event5.Origin).Return(int64(5), nil)
 	dbClientMock.On("EventsByTimeRange", event1.Origin, event5.Origin, 0, 10).Return([]models.Event{event5, event4, event3, event2, event1}, nil)
-	dbClientMock.On("EventCountByTimeRange", event2.Origin, event4.Origin).Return(uint32(3), nil)
+	dbClientMock.On("EventCountByTimeRange", event2.Origin, event4.Origin).Return(int64(3), nil)
 	dbClientMock.On("EventsByTimeRange", event2.Origin, event4.Origin, 0, 10).Return([]models.Event{event4, event3, event2}, nil)
 	dbClientMock.On("EventsByTimeRange", event2.Origin, event4.Origin, 1, 2).Return([]models.Event{event3, event2}, nil)
 	dbClientMock.On("EventsByTimeRange", event2.Origin, event4.Origin, 4, 2).Return(nil, errors.NewCommonEdgeX(errors.KindRangeNotSatisfiable, "query objects bounds out of range", nil))
@@ -431,18 +432,23 @@ func TestEventsByTimeRange(t *testing.T) {
 		errorExpected      bool
 		ExpectedErrKind    errors.ErrKind
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
-		{"Valid - all events", event1.Origin, event5.Origin, 0, 10, false, "", 5, uint32(5), http.StatusOK},
-		{"Valid - events trimmed by latest and oldest", event2.Origin, event4.Origin, 0, 10, false, "", 3, uint32(3), http.StatusOK},
-		{"Valid - events trimmed by latest and oldest and skipped first", event2.Origin, event4.Origin, 1, 2, false, "", 2, uint32(3), http.StatusOK},
-		{"Invalid - bounds out of range", event2.Origin, event4.Origin, 4, 2, true, errors.KindRangeNotSatisfiable, 0, uint32(0), http.StatusRequestedRangeNotSatisfiable},
+		{"Valid - all events", event1.Origin, event5.Origin, 0, 10, false, "", 5, int64(5), http.StatusOK},
+		{"Valid - events trimmed by latest and oldest", event2.Origin, event4.Origin, 0, 10, false, "", 3, int64(3), http.StatusOK},
+		{"Valid - events trimmed by latest and oldest and skipped first", event2.Origin, event4.Origin, 1, 2, false, "", 2, int64(3), http.StatusOK},
+		{"Invalid - bounds out of range", event2.Origin, event4.Origin, 4, 2, true, errors.KindRangeNotSatisfiable, 0, int64(0), http.StatusRequestedRangeNotSatisfiable},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			app := NewCoreDataApp(dic)
-			events, totalCount, err := app.EventsByTimeRange(testCase.start, testCase.end, testCase.offset, testCase.limit, dic)
+			events, totalCount, err := app.EventsByTimeRange(query.Parameters{
+				Start:  testCase.start,
+				End:    testCase.end,
+				Offset: testCase.offset,
+				Limit:  testCase.limit,
+			}, dic)
 			if testCase.errorExpected {
 				require.Error(t, err)
 				assert.NotEmpty(t, err.Error(), "Error message is empty")

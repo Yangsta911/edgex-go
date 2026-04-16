@@ -40,7 +40,7 @@ func buildSmtpMessage(sender string, subject string, toAddresses []string, conte
 
 	// only add MIME header if notification content type was set
 	if contentType != "" {
-		buf.WriteString(fmt.Sprintf("MIME-version: 1.0;\r\nContent-Type: %s; charset=\"UTF-8\";\r\n", contentType))
+		_, _ = fmt.Fprintf(buf, "MIME-version: 1.0;\r\nContent-Type: %s; charset=\"UTF-8\";\r\n", contentType)
 	}
 
 	buf.WriteString(smtpNewline)
@@ -102,7 +102,9 @@ func sendEmail(s config.SmtpInfo, auth mail.Auth, to []string, msg []byte) error
 	if err != nil {
 		return errors.NewCommonEdgeX(errors.KindServerError, fmt.Sprintf("fail to connected the SMTP server with address %s", addr), err)
 	}
-	defer c.Close()
+	defer func(c *mail.Client) {
+		_ = c.Close()
+	}(c)
 	serverName, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return errors.NewCommonEdgeXWrapper(err)

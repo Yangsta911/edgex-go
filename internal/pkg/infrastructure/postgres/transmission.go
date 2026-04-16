@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2024 IOTech Ltd
+// Copyright (C) 2024-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -83,7 +83,8 @@ func (c *Client) TransmissionsByTimeRange(start int64, end int64, offset, limit 
 		return nil, errors.NewCommonEdgeXWrapper(err)
 	}
 
-	transmission, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentWithTimeRangeAndPagination(transmissionTableName), validStart, validEnd, map[string]any{}, offset, validLimit)
+	transmission, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentWithTimeRangeAndPaginationAsNamedArgs(transmissionTableName),
+		pgx.NamedArgs{startTimeCondition: validStart, endTimeCondition: validEnd, jsonContentCondition: map[string]any{}, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all transmission by time range", err)
 	}
@@ -95,7 +96,7 @@ func (c *Client) TransmissionsByTimeRange(start int64, end int64, offset, limit 
 func (c *Client) AllTransmissions(offset, limit int) ([]models.Transmission, errors.EdgeX) {
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 
-	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentWithPagination(transmissionTableName), offset, validLimit)
+	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentWithPaginationAsNamedArgs(transmissionTableName), pgx.NamedArgs{offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), "failed to query all transmissions", err)
 	}
@@ -108,7 +109,8 @@ func (c *Client) TransmissionsByStatus(offset, limit int, status string) ([]mode
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 	queryObj := map[string]any{statusField: status}
 
-	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(transmissionTableName), queryObj, offset, validLimit)
+	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(transmissionTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all transmissions by status %s", status), err)
 	}
@@ -133,7 +135,8 @@ func (c *Client) TransmissionsBySubscriptionName(offset, limit int, subscription
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 	queryObj := map[string]any{subscriptionNameField: subscriptionName}
 
-	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(transmissionTableName), queryObj, offset, validLimit)
+	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(transmissionTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all transmissions by subscription name %s", subscriptionName), err)
 	}
@@ -142,24 +145,24 @@ func (c *Client) TransmissionsBySubscriptionName(offset, limit int, subscription
 }
 
 // TransmissionTotalCount returns the total count of transmissions
-func (c *Client) TransmissionTotalCount() (uint32, errors.EdgeX) {
+func (c *Client) TransmissionTotalCount() (int64, errors.EdgeX) {
 	return getTotalRowsCount(context.Background(), c.ConnPool, sqlQueryCount(transmissionTableName))
 }
 
 // TransmissionCountBySubscriptionName returns the count of transmissions by subscription name
-func (c *Client) TransmissionCountBySubscriptionName(subscriptionName string) (uint32, errors.EdgeX) {
+func (c *Client) TransmissionCountBySubscriptionName(subscriptionName string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{subscriptionNameField: subscriptionName}
 	return getTotalRowsCount(context.Background(), c.ConnPool, sqlQueryCountByJSONField(transmissionTableName), queryObj)
 }
 
 // TransmissionCountByStatus returns the count of transmissions by status
-func (c *Client) TransmissionCountByStatus(status string) (uint32, errors.EdgeX) {
+func (c *Client) TransmissionCountByStatus(status string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{statusField: status}
 	return getTotalRowsCount(context.Background(), c.ConnPool, sqlQueryCountByJSONField(transmissionTableName), queryObj)
 }
 
 // TransmissionCountByTimeRange returns the count of transmissions by time range
-func (c *Client) TransmissionCountByTimeRange(start int64, end int64) (uint32, errors.EdgeX) {
+func (c *Client) TransmissionCountByTimeRange(start int64, end int64) (int64, errors.EdgeX) {
 	validStart, validEnd, err := getValidStartAndEnd(start, end)
 	if err != nil {
 		return 0, errors.NewCommonEdgeXWrapper(err)
@@ -172,7 +175,8 @@ func (c *Client) TransmissionsByNotificationId(offset, limit int, id string) ([]
 	offset, validLimit := getValidOffsetAndLimit(offset, limit)
 	queryObj := map[string]any{notificationIdField: id}
 
-	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPagination(transmissionTableName), queryObj, offset, validLimit)
+	transmissions, err := queryTransmissions(context.Background(), c.ConnPool, sqlQueryContentByJSONFieldWithPaginationAsNamedArgs(transmissionTableName),
+		pgx.NamedArgs{jsonContentCondition: queryObj, offsetCondition: offset, limitCondition: validLimit})
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("failed to query all transmissions by notification id %s", id), err)
 	}
@@ -181,7 +185,7 @@ func (c *Client) TransmissionsByNotificationId(offset, limit int, id string) ([]
 }
 
 // TransmissionCountByNotificationId returns the count of transmissions by notification id
-func (c *Client) TransmissionCountByNotificationId(id string) (uint32, errors.EdgeX) {
+func (c *Client) TransmissionCountByNotificationId(id string) (int64, errors.EdgeX) {
 	queryObj := map[string]any{notificationIdField: id}
 	return getTotalRowsCount(context.Background(), c.ConnPool, sqlQueryCountByJSONField(transmissionTableName), queryObj)
 }

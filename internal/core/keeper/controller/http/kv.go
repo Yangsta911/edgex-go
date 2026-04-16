@@ -6,6 +6,7 @@
 package http
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/edgexfoundry/edgex-go/internal/core/keeper/application"
@@ -19,6 +20,8 @@ import (
 	"github.com/edgexfoundry/go-mod-bootstrap/v4/di"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/dtos/requests"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/dtos/responses"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
+
 	"github.com/labstack/echo/v4"
 )
 
@@ -66,7 +69,12 @@ func (rc *KVController) AddKeys(c echo.Context) error {
 	w := c.Response()
 
 	if r.Body != nil {
-		defer r.Body.Close()
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				bootstrapContainer.LoggingClientFrom(rc.dic.Get).Warnf("error occured while closing the request body: %s", err.Error())
+			}
+		}(r.Body)
 	}
 
 	lc := bootstrapContainer.LoggingClientFrom(rc.dic.Get)
@@ -126,6 +134,9 @@ func (rc *KVController) DeleteKeys(c echo.Context) error {
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
+
+	// publish the key change event
+	go application.PublishKeyChange(models.KVS{Key: key}, key, ctx, rc.dic)
 
 	response := responses.NewKeysResponse("", "", http.StatusOK, resp)
 	utils.WriteHttpHeader(w, ctx, http.StatusOK)

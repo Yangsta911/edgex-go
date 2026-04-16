@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2020-2023 IOTech Ltd
+// Copyright (C) 2020-2026 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -502,7 +502,7 @@ func TestUpdateDeviceProfile(t *testing.T) {
 	dbClientMock := &mocks.DBClient{}
 	dbClientMock.On("UpdateDeviceProfile", deviceProfileModel).Return(nil)
 	dbClientMock.On("UpdateDeviceProfile", notFoundDeviceProfileModel).Return(notFoundDBError)
-	dbClientMock.On("DeviceCountByProfileName", deviceProfileModel.Name).Return(uint32(1), nil)
+	dbClientMock.On("DeviceCountByProfileName", deviceProfileModel.Name).Return(int64(1), nil)
 	dbClientMock.On("DevicesByProfileName", 0, -1, deviceProfileModel.Name).Return([]models.Device{{ServiceName: testDeviceServiceName}}, nil)
 	dbClientMock.On("DeviceServiceByName", testDeviceServiceName).Return(models.DeviceService{}, nil)
 	dbClientMock.On("DeviceProfileByName", deviceProfileModel.Name).Return(deviceProfileModel, nil)
@@ -644,7 +644,7 @@ func TestPatchDeviceProfileBasicInfo(t *testing.T) {
 	dbClientMock.On("DeviceProfileByName", *valid.BasicInfo.Name).Return(dpModel, nil)
 	dbClientMock.On("DeviceProfileByName", notFoundName).Return(dpModel, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, "not found", nil))
 	dbClientMock.On("UpdateDeviceProfile", mock.Anything).Return(nil)
-	dbClientMock.On("DeviceCountByProfileName", *valid.BasicInfo.Name).Return(uint32(1), nil)
+	dbClientMock.On("DeviceCountByProfileName", *valid.BasicInfo.Name).Return(int64(1), nil)
 	dbClientMock.On("DevicesByProfileName", 0, -1, *valid.BasicInfo.Name).Return([]models.Device{{ServiceName: testDeviceServiceName}}, nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
@@ -946,12 +946,12 @@ func TestUpdateDeviceProfileByYaml(t *testing.T) {
 	dbClientMock := &mocks.DBClient{}
 	dbClientMock.On("UpdateDeviceProfile", validDeviceProfileModel).Return(nil)
 	dbClientMock.On("UpdateDeviceProfile", notFoundDeviceProfileModel).Return(notFoundDBError)
-	dbClientMock.On("DeviceCountByProfileName", validDeviceProfileModel.Name).Return(uint32(1), nil)
+	dbClientMock.On("DeviceCountByProfileName", validDeviceProfileModel.Name).Return(int64(1), nil)
 	dbClientMock.On("DevicesByProfileName", 0, -1, validDeviceProfileModel.Name).Return([]models.Device{{ServiceName: testDeviceServiceName}}, nil)
 	dbClientMock.On("DeviceServiceByName", testDeviceServiceName).Return(models.DeviceService{}, nil)
 	dbClientMock.On("DeviceProfileByName", validDeviceProfileModel.Name).Return(validDeviceProfileModel, nil)
-	dbClientMock.On("DeviceCountByProfileName", validDeviceProfileModel.Name).Return(uint32(0), nil)
-	dbClientMock.On("DeviceCountByProfileName", notFoundDeviceProfileModel.Name).Return(uint32(0), nil)
+	dbClientMock.On("DeviceCountByProfileName", validDeviceProfileModel.Name).Return(int64(0), nil)
+	dbClientMock.On("DeviceCountByProfileName", notFoundDeviceProfileModel.Name).Return(int64(0), nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -1049,6 +1049,7 @@ func TestDeviceProfileByName(t *testing.T) {
 	dbClientMock := &mocks.DBClient{}
 	dbClientMock.On("DeviceProfileByName", deviceProfile.Name).Return(deviceProfile, nil)
 	dbClientMock.On("DeviceProfileByName", notFoundName).Return(models.DeviceProfile{}, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, "device profile doesn't exist in the database", nil))
+	dbClientMock.On("DeviceCountByProfileName", deviceProfile.Name).Return(int64(1), nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -1100,6 +1101,7 @@ func TestDeviceProfileByName(t *testing.T) {
 				assert.Equal(t, testCase.expectedStatusCode, recorder.Result().StatusCode, "HTTP status code not as expected")
 				assert.Equal(t, testCase.expectedStatusCode, int(res.StatusCode), "Response status code not as expected")
 				assert.Equal(t, testCase.deviceProfileName, res.Profile.Name, "Event Id not as expected")
+				assert.Equal(t, int64(1), res.Profile.LinkedDeviceCount, "Linked device count not as expected")
 				assert.Empty(t, res.Message, "Message should be empty when it is successful")
 			}
 		})
@@ -1221,7 +1223,8 @@ func TestDeleteDeviceProfileByName_StrictProfileChanges(t *testing.T) {
 func TestAllDeviceProfiles(t *testing.T) {
 	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
 	deviceProfiles := []models.DeviceProfile{deviceProfile, deviceProfile, deviceProfile}
-	expectedTotalProfileCount := uint32(3)
+	expectedTotalProfileCount := int64(3)
+	expectedLinkedDeviceCount := int64(1)
 
 	dic := mockDic()
 	dbClientMock := &mocks.DBClient{}
@@ -1231,6 +1234,7 @@ func TestAllDeviceProfiles(t *testing.T) {
 	dbClientMock.On("AllDeviceProfiles", 0, 5, testDeviceProfileLabels).Return([]models.DeviceProfile{deviceProfiles[0], deviceProfiles[1]}, nil)
 	dbClientMock.On("AllDeviceProfiles", 1, 2, []string(nil)).Return([]models.DeviceProfile{deviceProfiles[1], deviceProfiles[2]}, nil)
 	dbClientMock.On("AllDeviceProfiles", 4, 1, testDeviceProfileLabels).Return([]models.DeviceProfile{}, errors.NewCommonEdgeX(errors.KindRangeNotSatisfiable, "query objects bounds out of range.", nil))
+	dbClientMock.On("DeviceCountByProfileName", deviceProfile.Name).Return(expectedLinkedDeviceCount, nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -1240,19 +1244,20 @@ func TestAllDeviceProfiles(t *testing.T) {
 	assert.NotNil(t, controller)
 
 	tests := []struct {
-		name               string
-		offset             string
-		limit              string
-		labels             string
-		errorExpected      bool
-		expectedCount      int
-		expectedTotalCount uint32
-		expectedStatusCode int
+		name                      string
+		offset                    string
+		limit                     string
+		labels                    string
+		errorExpected             bool
+		expectedCount             int
+		expectedTotalCount        int64
+		expectedLinkedDeviceCount int64
+		expectedStatusCode        int
 	}{
-		{"Valid - get device profiles without labels", "0", "10", "", false, 3, expectedTotalProfileCount, http.StatusOK},
-		{"Valid - get device profiles with labels", "0", "5", strings.Join(testDeviceProfileLabels, ","), false, 2, expectedTotalProfileCount, http.StatusOK},
-		{"Valid - get device profiles with offset and no labels", "1", "2", "", false, 2, expectedTotalProfileCount, http.StatusOK},
-		{"Invalid - offset out of range", "4", "1", strings.Join(testDeviceProfileLabels, ","), true, 0, expectedTotalProfileCount, http.StatusRequestedRangeNotSatisfiable},
+		{"Valid - get device profiles without labels", "0", "10", "", false, 3, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Valid - get device profiles with labels", "0", "5", strings.Join(testDeviceProfileLabels, ","), false, 2, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Valid - get device profiles with offset and no labels", "1", "2", "", false, 2, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Invalid - offset out of range", "4", "1", strings.Join(testDeviceProfileLabels, ","), true, 0, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusRequestedRangeNotSatisfiable},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1291,6 +1296,9 @@ func TestAllDeviceProfiles(t *testing.T) {
 				assert.Equal(t, testCase.expectedStatusCode, int(res.StatusCode), "Response status code not as expected")
 				assert.Equal(t, testCase.expectedCount, len(res.Profiles), "Profile count not as expected")
 				assert.Equal(t, testCase.expectedTotalCount, res.TotalCount, "Total count not as expected")
+				for _, profile := range res.Profiles {
+					assert.Equal(t, testCase.expectedLinkedDeviceCount, profile.LinkedDeviceCount, "Linked device count not as expected")
+				}
 				assert.Empty(t, res.Message, "Message should be empty when it is successful")
 			}
 		})
@@ -1300,7 +1308,7 @@ func TestAllDeviceProfiles(t *testing.T) {
 func TestDeviceProfilesByModel(t *testing.T) {
 	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
 	deviceProfiles := []models.DeviceProfile{deviceProfile, deviceProfile, deviceProfile}
-	expectedTotalProfileCount := uint32(3)
+	expectedTotalProfileCount := int64(3)
 
 	dic := mockDic()
 	dbClientMock := &mocks.DBClient{}
@@ -1323,7 +1331,7 @@ func TestDeviceProfilesByModel(t *testing.T) {
 		model              string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get device profiles by model", "0", "10", TestModel, false, 3, expectedTotalProfileCount, http.StatusOK},
@@ -1376,7 +1384,7 @@ func TestDeviceProfilesByModel(t *testing.T) {
 func TestDeviceProfilesByManufacturer(t *testing.T) {
 	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
 	deviceProfiles := []models.DeviceProfile{deviceProfile, deviceProfile, deviceProfile}
-	expectedTotalProfileCount := uint32(3)
+	expectedTotalProfileCount := int64(3)
 
 	dic := mockDic()
 	dbClientMock := &mocks.DBClient{}
@@ -1399,7 +1407,7 @@ func TestDeviceProfilesByManufacturer(t *testing.T) {
 		manufacturer       string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get device profiles by manufacturer", "0", "10", TestManufacturer, false, 3, expectedTotalProfileCount, http.StatusOK},
@@ -1452,7 +1460,7 @@ func TestDeviceProfilesByManufacturer(t *testing.T) {
 func TestDeviceProfilesByManufacturerAndModel(t *testing.T) {
 	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
 	deviceProfiles := []models.DeviceProfile{deviceProfile, deviceProfile, deviceProfile}
-	expectedTotalProfileCount := uint32(3)
+	expectedTotalProfileCount := int64(3)
 
 	dic := mockDic()
 	dbClientMock := &mocks.DBClient{}
@@ -1476,7 +1484,7 @@ func TestDeviceProfilesByManufacturerAndModel(t *testing.T) {
 		model              string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get device profiles by manufacturer and model", "0", "10", TestManufacturer, TestModel, false, 3, expectedTotalProfileCount, http.StatusOK},
@@ -1530,7 +1538,8 @@ func TestDeviceProfilesByManufacturerAndModel(t *testing.T) {
 func TestAllDeviceProfileBasicInfos(t *testing.T) {
 	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
 	deviceProfiles := []models.DeviceProfile{deviceProfile, deviceProfile, deviceProfile}
-	expectedTotalProfileCount := uint32(3)
+	expectedTotalProfileCount := int64(3)
+	expectedLinkedDeviceCount := int64(1)
 
 	dic := mockDic()
 	dbClientMock := &mocks.DBClient{}
@@ -1540,6 +1549,7 @@ func TestAllDeviceProfileBasicInfos(t *testing.T) {
 	dbClientMock.On("AllDeviceProfiles", 0, 5, testDeviceProfileLabels).Return([]models.DeviceProfile{deviceProfiles[0], deviceProfiles[1]}, nil)
 	dbClientMock.On("AllDeviceProfiles", 1, 2, []string(nil)).Return([]models.DeviceProfile{deviceProfiles[1], deviceProfiles[2]}, nil)
 	dbClientMock.On("AllDeviceProfiles", 4, 1, testDeviceProfileLabels).Return([]models.DeviceProfile{}, errors.NewCommonEdgeX(errors.KindRangeNotSatisfiable, "query objects bounds out of range.", nil))
+	dbClientMock.On("DeviceCountByProfileName", deviceProfile.Name).Return(expectedLinkedDeviceCount, nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -1549,24 +1559,25 @@ func TestAllDeviceProfileBasicInfos(t *testing.T) {
 	assert.NotNil(t, controller)
 
 	tests := []struct {
-		name               string
-		offset             string
-		limit              string
-		labels             string
-		errorExpected      bool
-		expectedCount      int
-		expectedTotalCount uint32
-		expectedStatusCode int
+		name                      string
+		offset                    string
+		limit                     string
+		labels                    string
+		errorExpected             bool
+		expectedCount             int
+		expectedTotalCount        int64
+		expectedLinkedDeviceCount int64
+		expectedStatusCode        int
 	}{
-		{"Valid - get device profile basic infos without labels", "0", "10", "", false, 3, expectedTotalProfileCount, http.StatusOK},
-		{"Valid - get device profile basic infos with labels", "0", "5", strings.Join(testDeviceProfileLabels, ","), false, 2, expectedTotalProfileCount, http.StatusOK},
-		{"Valid - get device profile basic infos with offset and no labels", "1", "2", "", false, 2, expectedTotalProfileCount, http.StatusOK},
-		{"Invalid - offset out of range", "4", "1", strings.Join(testDeviceProfileLabels, ","), true, 0, expectedTotalProfileCount, http.StatusRequestedRangeNotSatisfiable},
+		{"Valid - get device profile basic infos without labels", "0", "10", "", false, 3, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Valid - get device profile basic infos with labels", "0", "5", strings.Join(testDeviceProfileLabels, ","), false, 2, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Valid - get device profile basic infos with offset and no labels", "1", "2", "", false, 2, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusOK},
+		{"Invalid - offset out of range", "4", "1", strings.Join(testDeviceProfileLabels, ","), true, 0, expectedTotalProfileCount, expectedLinkedDeviceCount, http.StatusRequestedRangeNotSatisfiable},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			e := echo.New()
-			req, err := http.NewRequest(http.MethodGet, common.ApiAllDeviceProfileRoute, http.NoBody)
+			req, err := http.NewRequest(http.MethodGet, common.ApiAllDeviceProfileBasicInfoRoute, http.NoBody)
 			query := req.URL.Query()
 			query.Add(common.Offset, testCase.offset)
 			query.Add(common.Limit, testCase.limit)
@@ -1579,7 +1590,7 @@ func TestAllDeviceProfileBasicInfos(t *testing.T) {
 			// Act
 			recorder := httptest.NewRecorder()
 			c := e.NewContext(req, recorder)
-			err = controller.AllDeviceProfiles(c)
+			err = controller.AllDeviceProfileBasicInfos(c)
 			require.NoError(t, err)
 
 			// Assert
@@ -1600,7 +1611,115 @@ func TestAllDeviceProfileBasicInfos(t *testing.T) {
 				assert.Equal(t, testCase.expectedStatusCode, int(res.StatusCode), "Response status code not as expected")
 				assert.Equal(t, testCase.expectedCount, len(res.Profiles), "Profile count not as expected")
 				assert.Equal(t, testCase.expectedTotalCount, res.TotalCount, "Total count not as expected")
+				for _, profile := range res.Profiles {
+					assert.Equal(t, testCase.expectedLinkedDeviceCount, profile.LinkedDeviceCount, "Linked device count not as expected")
+				}
 				assert.Empty(t, res.Message, "Message should be empty when it is successful")
+			}
+		})
+	}
+}
+
+func TestPatchDeviceProfileTags(t *testing.T) {
+	deviceProfile := dtos.ToDeviceProfileModel(buildTestDeviceProfileRequest().Profile)
+	notFoundName := "notFoundName"
+	expectedRequestId := ExampleUUID
+	updateTags := map[string]any{"TestTagKey": "NewTestTagValue", "TestTagKey2": "TestTagValue2"}
+	testReq := requests.DeviceProfileTagsRequest{
+		BaseRequest: commonDTO.BaseRequest{
+			Versionable: commonDTO.NewVersionable(),
+			RequestId:   ExampleUUID,
+		},
+		UpdateDeviceProfileTags: dtos.UpdateDeviceProfileTags{
+			DeviceResources: []dtos.UpdateTags{{Name: TestDeviceResourceName, Tags: updateTags}},
+			DeviceCommands:  []dtos.UpdateTags{{Name: TestDeviceCommandName, Tags: updateTags}},
+		},
+	}
+
+	valid := testReq
+	noRequestId := valid
+	noRequestId.RequestId = ""
+
+	noDRName := testReq
+	noDRName.DeviceResources = []dtos.UpdateTags{{Tags: updateTags}}
+	emptyDRName := testReq
+	emptyDRName.DeviceResources = []dtos.UpdateTags{{Name: " ", Tags: updateTags}}
+	noDRTags := testReq
+	noDRTags.DeviceResources = []dtos.UpdateTags{{Name: TestDeviceResourceName}}
+	emptyDRTags := testReq
+	emptyDRTags.DeviceResources = []dtos.UpdateTags{{Name: TestDeviceCommandName, Tags: map[string]any{}}}
+
+	noDCName := testReq
+	noDCName.DeviceCommands = []dtos.UpdateTags{{Tags: updateTags}}
+	emptyDCName := testReq
+	emptyDCName.DeviceCommands = []dtos.UpdateTags{{Name: " ", Tags: updateTags}}
+	noDCTags := testReq
+	noDCTags.DeviceCommands = []dtos.UpdateTags{{Name: TestDeviceCommandName}}
+
+	emptyDCTags := testReq
+	emptyDCTags.DeviceCommands = []dtos.UpdateTags{{Name: TestDeviceCommandName, Tags: map[string]any{}}}
+
+	dic := mockDic()
+	dbClientMock := &mocks.DBClient{}
+	dbClientMock.On("DeviceProfileByName", deviceProfile.Name).Return(deviceProfile, nil)
+	dbClientMock.On("DeviceProfileByName", notFoundName).Return(deviceProfile, errors.NewCommonEdgeX(errors.KindEntityDoesNotExist, "not found", nil))
+	dbClientMock.On("DevicesByProfileName", 0, -1, deviceProfile.Name).Return([]models.Device{{ServiceName: testDeviceServiceName}}, nil)
+	dbClientMock.On("DeviceCountByProfileName", deviceProfile.Name).Return(int64(1), nil)
+	dbClientMock.On("UpdateDeviceProfile", mock.Anything).Return(nil)
+	dic.Update(di.ServiceConstructorMap{
+		container.DBClientInterfaceName: func(get di.Get) interface{} {
+			return dbClientMock
+		},
+	})
+
+	controller := NewDeviceProfileController(dic)
+	require.NotNil(t, controller)
+
+	tests := []struct {
+		name               string
+		deviceProfileName  string
+		request            requests.DeviceProfileTagsRequest
+		expectedStatusCode int
+	}{
+		{"valid", deviceProfile.Name, valid, http.StatusOK},
+		{"valid - no request id", deviceProfile.Name, noRequestId, http.StatusOK},
+		{"invalid - device profile not found", notFoundName, valid, http.StatusNotFound},
+		{"invalid - no device resource name", deviceProfile.Name, noDRName, http.StatusBadRequest},
+		{"invalid - empty device resource name", deviceProfile.Name, emptyDRName, http.StatusBadRequest},
+		{"invalid - no device resource tags", deviceProfile.Name, noDRTags, http.StatusBadRequest},
+		{"invalid - empty device resource tags", deviceProfile.Name, emptyDRTags, http.StatusBadRequest},
+		{"invalid - no device command name", deviceProfile.Name, noDCName, http.StatusBadRequest},
+		{"invalid - empty device command name", deviceProfile.Name, emptyDCName, http.StatusBadRequest},
+		{"invalid - no device command tags", deviceProfile.Name, noDRTags, http.StatusBadRequest},
+		{"invalid - empty device command tags", deviceProfile.Name, emptyDCTags, http.StatusBadRequest},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			e := echo.New()
+			jsonData, err := json.Marshal(testCase.request)
+			require.NoError(t, err)
+
+			reader := strings.NewReader(string(jsonData))
+			req, err := http.NewRequest(http.MethodPatch, common.ApiDeviceProfileTagsByNameRoute, reader)
+			require.NoError(t, err)
+
+			// Act
+			recorder := httptest.NewRecorder()
+			c := e.NewContext(req, recorder)
+			c.SetParamNames(common.Name)
+			c.SetParamValues(testCase.deviceProfileName)
+			err = controller.PatchDeviceProfileTags(c)
+			require.NoError(t, err)
+
+			var res commonDTO.BaseResponse
+			err = json.Unmarshal(recorder.Body.Bytes(), &res)
+			require.NoError(t, err)
+
+			assert.NotEmpty(t, recorder.Body.String(), "Message is empty")
+			assert.Equal(t, common.ApiVersion, res.ApiVersion, "API Version not as expected")
+			assert.Equal(t, testCase.expectedStatusCode, recorder.Result().StatusCode, "HTTP status code not as expected")
+			if res.RequestId != "" {
+				assert.Equal(t, expectedRequestId, res.RequestId, "RequestID not as expected")
 			}
 		})
 	}

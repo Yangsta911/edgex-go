@@ -46,6 +46,9 @@ all-services:
     Port: 5432
     Timeout: "5s"
     Type: "postgres"
+    MaxConns: 4
+    MaxConnIdleTime: "30m"
+    MaxConnLifetime: "1h"
   
   MessageBus:
     Protocol: "mqtt"
@@ -141,3 +144,6 @@ device-services:
     Discovery:
       Enabled: false
       Interval: "0s"
+    AutoEvents:
+      # If set to true, only updated readings compared to the previous event are included in the generated auto event
+      SendChangedReadingsOnly: false

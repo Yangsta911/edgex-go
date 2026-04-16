@@ -5,6 +5,8 @@ package http
 import (
 	"bytes"
 	"fmt"
+	"github.com/edgexfoundry/edgex-go/internal/core/data/query"
+	"github.com/spf13/cast"
 	"io"
 	"math"
 	"net/http"
@@ -218,11 +220,13 @@ func (ec *EventController) AllEvents(c echo.Context) error {
 	config := dataContainer.ConfigurationFrom(ec.dic.Get)
 
 	// parse URL query string for offset, limit
-	offset, limit, _, err := utils.ParseGetAllObjectsRequestQueryString(c, 0, math.MaxInt32, -1, config.Service.MaxResultCount)
+	offset, limit, _, err := utils.ParseGetAllObjectsRequestQueryString(c, minOffset, math.MaxInt32, -1, config.Service.MaxResultCount)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	events, totalCount, err := ec.app.AllEvents(offset, limit, ec.dic)
+	parms := query.Parameters{Offset: offset, Limit: limit, Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	events, totalCount, err := ec.app.AllEvents(parms, ec.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -241,11 +245,13 @@ func (ec *EventController) EventsByDeviceName(c echo.Context) error {
 	name := c.Param(common.Name)
 
 	// parse URL query string for offset, limit
-	offset, limit, _, err := utils.ParseGetAllObjectsRequestQueryString(c, 0, math.MaxInt32, -1, config.Service.MaxResultCount)
+	offset, limit, _, err := utils.ParseGetAllObjectsRequestQueryString(c, minOffset, math.MaxInt32, -1, config.Service.MaxResultCount)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	events, totalCount, err := ec.app.EventsByDeviceName(offset, limit, name, ec.dic)
+	parms := query.Parameters{Offset: offset, Limit: limit, Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	events, totalCount, err := ec.app.EventsByDeviceName(parms, name, ec.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
@@ -283,11 +289,15 @@ func (ec *EventController) EventsByTimeRange(c echo.Context) error {
 	config := dataContainer.ConfigurationFrom(ec.dic.Get)
 
 	// parse time range (start, end), offset, and limit from incoming request
-	start, end, offset, limit, err := utils.ParseTimeRangeOffsetLimit(c, 0, math.MaxInt32, -1, config.Service.MaxResultCount)
+	start, end, offset, limit, err := utils.ParseTimeRangeOffsetLimit(c, minOffset, math.MaxInt32, -1, config.Service.MaxResultCount)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}
-	events, totalCount, err := ec.app.EventsByTimeRange(start, end, offset, limit, ec.dic)
+	parms := query.Parameters{
+		Start: start, End: end, Offset: offset, Limit: limit,
+		Numeric: cast.ToBool(c.QueryParam(common.Numeric))}
+
+	events, totalCount, err := ec.app.EventsByTimeRange(parms, ec.dic)
 	if err != nil {
 		return utils.WriteErrorResponse(w, ctx, lc, err, "")
 	}

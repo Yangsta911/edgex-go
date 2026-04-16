@@ -231,15 +231,16 @@ func TestAddDevice(t *testing.T) {
 			var responseEnvelope types.MessageEnvelope
 			mockMessaging := &messagingMocks.MessageClient{}
 			if testCase.expectedValidation {
-				if testCase.expectedResponseCode == http.StatusInternalServerError {
+				switch testCase.expectedResponseCode {
+				case http.StatusInternalServerError:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 						requestEnvelope, ok := args.Get(0).(types.MessageEnvelope)
 						require.True(t, ok)
 						responseEnvelope = types.NewMessageEnvelopeWithError(requestEnvelope.RequestID, "validation failed")
 					}).Return(&responseEnvelope, nil)
-				} else if testCase.expectedResponseCode == http.StatusServiceUnavailable {
+				case http.StatusServiceUnavailable:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&responseEnvelope, errors.New("timed out"))
-				} else {
+				default:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 						requestEnvelope, ok := args.Get(0).(types.MessageEnvelope)
 						require.True(t, ok)
@@ -328,13 +329,13 @@ func TestDeleteDeviceByName(t *testing.T) {
 
 	dic := mockDic()
 	dbClientMock := &dbMock.DBClient{}
-	dbClientMock.On("DeviceTree", device.Name, 1, 0, 1, []string(nil)).Return(uint32(0), nil, nil)
+	dbClientMock.On("DeviceTree", device.Name, 1, 0, 1, []string(nil)).Return(int64(0), nil, nil)
 	dbClientMock.On("DeleteDeviceByName", device.Name).Return(nil)
 	dbClientMock.On("DeleteDeviceByName", notFoundName).Return(edgexErr.NewCommonEdgeX(edgexErr.KindEntityDoesNotExist, "device doesn't exist in the database", nil))
 	dbClientMock.On("DeviceByName", notFoundName).Return(device, edgexErr.NewCommonEdgeX(edgexErr.KindEntityDoesNotExist, "device doesn't exist in the database", nil))
 	dbClientMock.On("DeviceByName", device.Name).Return(device, nil)
 	dbClientMock.On("DeviceByName", deviceParent.Name).Return(device, nil)
-	dbClientMock.On("DeviceTree", deviceParent.Name, 1, 0, 1, []string(nil)).Return(uint32(1), []models.Device{device}, nil)
+	dbClientMock.On("DeviceTree", deviceParent.Name, 1, 0, 1, []string(nil)).Return(int64(1), []models.Device{device}, nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -398,8 +399,8 @@ func TestAllDeviceByServiceName(t *testing.T) {
 	device3WithServiceB.ServiceName = testServiceB
 
 	devices := []models.Device{device1WithServiceA, device2WithServiceA, device3WithServiceB}
-	expectedTotalCountServiceA := uint32(2)
-	expectedTotalCountServiceB := uint32(1)
+	expectedTotalCountServiceA := int64(2)
+	expectedTotalCountServiceB := int64(1)
 
 	dic := mockDic()
 	dbClientMock := &dbMock.DBClient{}
@@ -423,7 +424,7 @@ func TestAllDeviceByServiceName(t *testing.T) {
 		serviceName        string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get devices with serviceName", "0", "5", testServiceA, false, 2, expectedTotalCountServiceA, http.StatusOK},
@@ -665,15 +666,16 @@ func TestPatchDevice(t *testing.T) {
 			var responseEnvelope types.MessageEnvelope
 			mockMessaging := &messagingMocks.MessageClient{}
 			if testCase.expectedValidation {
-				if testCase.expectedResponseCode == http.StatusInternalServerError {
+				switch testCase.expectedResponseCode {
+				case http.StatusInternalServerError:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 						requestEnvelope, ok := args.Get(0).(types.MessageEnvelope)
 						require.True(t, ok)
 						responseEnvelope = types.NewMessageEnvelopeWithError(requestEnvelope.RequestID, "validation failed")
 					}).Return(&responseEnvelope, nil)
-				} else if testCase.expectedResponseCode == http.StatusServiceUnavailable {
+				case http.StatusServiceUnavailable:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&responseEnvelope, errors.New("timed out"))
-				} else {
+				default:
 					mockMessaging.On("Request", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 						requestEnvelope, ok := args.Get(0).(types.MessageEnvelope)
 						require.True(t, ok)
@@ -752,7 +754,7 @@ func TestPatchDevice(t *testing.T) {
 func TestAllDevices(t *testing.T) {
 	device := dtos.ToDeviceModel(buildTestDeviceRequest().Device)
 	devices := []models.Device{device, device, device}
-	expectedDeviceTotalCount := uint32(len(devices))
+	expectedDeviceTotalCount := int64(len(devices))
 
 	dic := mockDic()
 	dbClientMock := &dbMock.DBClient{}
@@ -762,8 +764,8 @@ func TestAllDevices(t *testing.T) {
 	dbClientMock.On("AllDevices", 0, 5, testDeviceLabels).Return([]models.Device{devices[0], devices[1]}, nil)
 	dbClientMock.On("AllDevices", 1, 2, []string(nil)).Return([]models.Device{devices[1], devices[2]}, nil)
 	dbClientMock.On("AllDevices", 4, 1, testDeviceLabels).Return([]models.Device{}, edgexErr.NewCommonEdgeX(edgexErr.KindRangeNotSatisfiable, "query objects bounds out of range.", nil))
-	dbClientMock.On("DeviceTree", "foo", 4, 0, 10, []string(nil)).Return(uint32(expectedDeviceTotalCount), devices, nil)
-	dbClientMock.On("DeviceTree", "foo", math.MaxInt32, 0, 10, testDeviceLabels).Return(uint32(expectedDeviceTotalCount), devices, nil)
+	dbClientMock.On("DeviceTree", "foo", 4, 0, 10, []string(nil)).Return(expectedDeviceTotalCount, devices, nil)
+	dbClientMock.On("DeviceTree", "foo", math.MaxInt32, 0, 10, testDeviceLabels).Return(expectedDeviceTotalCount, devices, nil)
 	dic.Update(di.ServiceConstructorMap{
 		container.DBClientInterfaceName: func(get di.Get) interface{} {
 			return dbClientMock
@@ -781,7 +783,7 @@ func TestAllDevices(t *testing.T) {
 		maxLevels          string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get devices without labels", "0", "10", "", "", "", false, 3, expectedDeviceTotalCount, http.StatusOK},
@@ -920,8 +922,8 @@ func TestDevicesByProfileName(t *testing.T) {
 	device3WithProfileB.ProfileName = testProfileB
 
 	devices := []models.Device{device1WithProfileA, device2WithProfileA, device3WithProfileB}
-	expectedTotalCountProfileA := uint32(2)
-	expectedTotalCountProfileB := uint32(1)
+	expectedTotalCountProfileA := int64(2)
+	expectedTotalCountProfileB := int64(1)
 
 	dic := mockDic()
 	dbClientMock := &dbMock.DBClient{}
@@ -945,7 +947,7 @@ func TestDevicesByProfileName(t *testing.T) {
 		profileName        string
 		errorExpected      bool
 		expectedCount      int
-		expectedTotalCount uint32
+		expectedTotalCount int64
 		expectedStatusCode int
 	}{
 		{"Valid - get devices with profileName", "0", "5", testProfileA, false, 2, expectedTotalCountProfileA, http.StatusOK},

@@ -63,6 +63,19 @@ components:
         sourceName:
           type: string
           description: SourceName indicates the name of the resource or device command in the device profile which describes the event to generate
+        retention:
+          type: object
+          description: Retention defines policies for retaining autoevents.
+          properties:
+            maxCap:
+              type: integer
+              description: The maximum number of events to retain.
+            minCap:
+              type: integer
+              description: The minimum number of events to retain before deletion.
+            duration:
+              type: string
+              description: Duration string representing how long to retain the events, valid time units are "s", "m", "h", e.g., "1.5h" or "2h45m"
       required:
         - interval
         - resource
@@ -291,7 +304,6 @@ components:
         properties:
           type: object
           description: A map of properties required to address the given device
-
     DeviceProfileBasicInfo:
       description: "A profile basic information"
       type: object
@@ -313,6 +325,9 @@ components:
           description: Labels used to search for groups of profiles
           items:
             type: string
+        linkedDeviceCount:
+          type: integer
+          description: The total number of devices associated with this profile.
     DeviceProfileBasicInfoRequest:
       description: "Update basic information of an existing profile"
       type: object
@@ -323,6 +338,32 @@ components:
           $ref: '#/components/schemas/DeviceProfileBasicInfo'
       required:
         - profileName
+    UpdateTags:
+      type: object
+      properties:
+        name:
+          type: string
+          description: device resource or device command name
+        tags:
+          type: object
+          description: A map of tags to add or update
+      required:
+        - name
+        - tags
+    DeviceProfileTagsRequest:
+      description: "Add/Update tags of device resources/device commands in an existing profile"
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/BaseRequest'
+      properties:
+        deviceResources:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateTags'
+        deviceCommands:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateTags'
     MultiDeviceProfileBasicInfosResponse:
       allOf:
         - $ref: '#/components/schemas/BaseWithTotalCountResponse'
@@ -371,6 +412,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeviceCommand'
+        linkedDeviceCount:
+          type: integer
+          description: The total number of devices associated with this profile.
     CreateDeviceProfile:
       description: "A profile defining a class of device to be onboarded, including its capabilities and data format."
       type: object
@@ -433,7 +477,7 @@ components:
           type: boolean
           description: "Indicate the visibility of the DeviceResource via a CoreCommand."
         tags:
-          type: string
+          type: object
           description: "Tags for adding additional information on reading level"
         properties:
           $ref: '#/components/schemas/ResourceProperties'
@@ -592,6 +636,9 @@ components:
         adminState:
           type: string
           description: Device Service Admin State
+        properties:
+          type: object
+          description: A map of properties required to address the given device service
     DeviceServiceResponse:
       allOf:
         - $ref: '#/components/schemas/BaseResponse'
@@ -653,8 +700,8 @@ components:
             - UNLOCKED
         discoveredDevice:
           type: object
-          items:
-            $ref: '#/components/schemas/DiscoveredDevice'
+          allOf:
+            - $ref: '#/components/schemas/DiscoveredDevice'
     CreateProvisionWatcher:
       description: "A ProvisionWatcher defines the filtering criteria for device auto discovery."
       type: object
@@ -739,14 +786,14 @@ components:
         - $ref: '#/components/schemas/BaseResponse'
       type: object
       properties:
-        provisionwatcher:
+        provisionWatcher:
           $ref: '#/components/schemas/ProvisionWatcher'
     MultiProvisionWatchersResponse:
       allOf:
         - $ref: '#/components/schemas/BaseWithTotalCountResponse'
       type: object
       properties:
-        provisionwatchers:
+        provisionWatchers:
           type: array
           items:
             $ref: '#/components/schemas/ProvisionWatcher'
@@ -837,7 +884,7 @@ components:
         name:
           type: string
         tags:
-          type: string
+          type: object
           description: "Tags for adding additional information on event level"
         isHidden:
           type: boolean
@@ -978,8 +1025,7 @@ components:
     ProtocolProperties:
       description: A map of properties for the given protocol
       type: object
-      additionalProperties:
-        type: object
+      additionalProperties: true
     ResourceOperation:
       description: "Defines an operation of which a device is capable."
       type: object
@@ -1178,16 +1224,16 @@ components:
       required: false
       schema:
         type: boolean
+        default: false
       description: "Indicates whether to skip the Device Service Validation API call."
-      default: false
     forceParam:
       in: query
       name: force
       required: false
       schema:
         type: boolean
+        default: false
       description: "Indicates whether to force add the device if device name already exists."
-      default: false
   headers:
     correlatedResponseHeader:
       description: "A response header that returns the unique correlation ID used to initiate the request."
@@ -1348,8 +1394,8 @@ components:
             protocols:
               modbus-tcp:
                 Address: "localhost"
-                Port: "502"
-                UnitID: "1"
+                Port: 502
+                UnitID: 1
             tags:
               tag1:
                 field1: "field1Value"
@@ -1581,6 +1627,7 @@ components:
               resourceOperations:
                 - deviceResource: "Float32"
                   defaultValue: "0.0123"
+          linkedDeviceCount: 1
         - id: "3edf4fe9-b3b8-4f78-bb94-ff55f7d9f316"
           name: "Device-Modbus-Profile"
           description: "Example of Device-Modbus"
@@ -1603,6 +1650,7 @@ components:
               resourceOperations:
                 - deviceResource: "1"
                   defaultValue: "false"
+          linkedDeviceCount: 0
     GetAllDeviceProfileBasicInfosResponse:
       value:
         apiVersion: "v3"
@@ -1617,6 +1665,7 @@ components:
             model: "Device-Virtual-01"
             labels:
               - device-virtual-example
+            linkedDeviceCount: 1
           - id: "3edf4fe9-b3b8-4f78-bb94-ff55f7d9f316"
             name: "Device-Modbus-Profile"
             description: "Example of Device-Modbus"
@@ -1624,13 +1673,14 @@ components:
             model: "Device-Modbus-01"
             labels:
               - device-modbus-example
+            linkedDeviceCount: 0
     GetAllProvisionWatchersResponse:
       value:
         apiVersion: "v3"
         requestId: "4e63c9b9-9cc4-45e4-9bf0-6d994a3860b4"
         statusCode: 200
         totalCount: 3
-        provisionwatchers:
+        provisionWatchers:
           - id: "1ff7762f-c432-4af0-9a5d-756bbc92744b"
             name: "virtual-watcher"
             created: 1600927134890
@@ -2557,6 +2607,7 @@ paths:
                     readWrite: "RW"
                     resourceOperations:
                       - deviceResource: "Float32"
+                linkedDeviceCount: 1
         '400':
           description: "Request is in an invalid state"
           headers:
@@ -2646,6 +2697,73 @@ paths:
                   $ref: '#/components/examples/423Example'
         '500':
           description: "Internal Server Error"
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/correlatedResponseHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                500Example:
+                  $ref: '#/components/examples/500Example'
+  '/deviceprofile/name/{name}/tags':
+    parameters:
+      - $ref: '#/components/parameters/correlatedRequestHeader'
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "The unique name of a device profile"
+    patch:
+      summary: "Allows adding or updating the tags field for device resources or device commands within an existing device profile. Removing existing tags is not supported."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              $ref: '#/components/schemas/DeviceProfileTagsRequest'
+            example:
+              apiVersion: "v3"
+              requestId: "2463bff9-aa53-4bc4-bebf-42fe81146ea8"
+              deviceResources:
+                - name: "Float32"
+                  tags:
+                    tag1: "field1Value"
+              deviceCommands:
+                - name: "Float32"
+                  tags:
+                    tag2:
+                      field3: "field3Value"
+      responses:
+        '200':
+          description: "Update successful"
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/correlatedResponseHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaseResponse'
+              examples:
+                200Example:
+                  $ref: '#/components/examples/200Example'
+        '400':
+          description: "Request is in an invalid state"
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/correlatedResponseHeader'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                400Example:
+                  $ref: '#/components/examples/400Example'
+        '500':
+          description: An unexpected error occurred on the server
           headers:
             X-Correlation-ID:
               $ref: '#/components/headers/correlatedResponseHeader'
@@ -3957,7 +4075,7 @@ paths:
                 apiVersion: "v3"
                 requestId: "4e63c9b9-9cc4-45e4-9bf0-6d994a3860b4"
                 statusCode: 200
-                provisionwatcher:
+                provisionWatcher:
                   id: "1ff7762f-c432-4af0-9a5d-756bbc92744b"
                   name: "virtual-watcher"
                   created: 1600927134890

@@ -1,5 +1,5 @@
 //
-// Copyright (C) 2020-2024 IOTech Ltd
+// Copyright (C) 2020-2025 IOTech Ltd
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -167,7 +168,7 @@ func ParseTimeRangeOffsetLimit(c echo.Context, minOffset int, maxOffset int, min
 		return start, end, offset, limit, edgexErr
 	}
 	if end < start {
-		return start, end, offset, limit, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("end's value %v is not allowed to be greater than start's value %v", end, start), nil)
+		return start, end, offset, limit, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("end's value %v is not allowed to be less than start's value %v", end, start), nil)
 	}
 	offset, limit, _, edgexErr = ParseGetAllObjectsRequestQueryString(c, minOffset, maxOffset, minLimit, maxLimit)
 	if edgexErr != nil {
@@ -187,7 +188,7 @@ func ParseQueryStringTimeRangeOffsetLimit(c echo.Context, minOffset int, maxOffs
 		return start, end, offset, limit, edgexErr
 	}
 	if end < start {
-		return start, end, offset, limit, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("end's value %v is not allowed to be greater than start's value %v", end, start), nil)
+		return start, end, offset, limit, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("end's value %v is not allowed to be less than start's value %v", end, start), nil)
 	}
 	offset, limit, _, edgexErr = ParseGetAllObjectsRequestQueryString(c, minOffset, maxOffset, minLimit, maxLimit)
 	if edgexErr != nil {
@@ -223,7 +224,13 @@ func ParsePathParamToInt64(c echo.Context, pathKey string, min, max int64) (int6
 
 // ParseBodyToMap parses the body of http request to a map[string]interfaces{}.  EdgeX error will be returned if any parsing error occurs.
 func ParseBodyToMap(r *http.Request) (map[string]interface{}, errors.EdgeX) {
-	defer r.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			// cannot use logging client here, just print to console
+			fmt.Printf("error occured while closing the request body: %s", err.Error())
+		}
+	}(r.Body)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return nil, errors.NewCommonEdgeX(errors.KindServerError, "failed to read request body", err)
@@ -235,4 +242,13 @@ func ParseBodyToMap(r *http.Request) (map[string]interface{}, errors.EdgeX) {
 	}
 
 	return result, nil
+}
+
+// ParseAggregateFuncQueryString checks whether the aggregateFunc query param is valid, and returns the value in all capital letters
+func ParseAggregateFuncQueryString(aggFuncParam string) (string, errors.EdgeX) {
+	aggFunc := strings.ToUpper(aggFuncParam)
+	if slices.Contains([]string{common.MinFunc, common.MaxFunc, common.AvgFunc, common.CountFunc, common.SumFunc}, aggFunc) {
+		return aggFunc, nil
+	}
+	return "", errors.NewCommonEdgeX(errors.KindContractInvalid, "invalid aggregate function specified", nil)
 }
